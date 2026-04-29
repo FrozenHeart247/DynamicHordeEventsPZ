@@ -1,0 +1,11 @@
+module DynamicHordeEvents
+{
+    sound DynamicHordeWarning
+    {
+        category = UI,
+        clip
+        {
+            file = media/sound/horde_warning.ogg,
+        }
+    }
+}
