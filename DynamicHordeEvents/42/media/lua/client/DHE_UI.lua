@@ -1,5 +1,4 @@
 -- Dynamic Horde Events B42 Debug
--- Texture-capable indicator. Still render-only: no ISPanel, no mouse capture.
 
 require "DHE_Config"
 
