@@ -317,6 +317,17 @@ option DynamicHordeEvents.EnableCataclysmWeather
     translation = DynamicHordeEvents_EnableCataclysmWeather,
 }
 
+
+option DynamicHordeEvents.CataclysmWeatherDurationHours
+{
+    type = integer,
+    min = 1,
+    max = 72,
+    default = 8,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmWeatherDurationHours,
+}
+
 option DynamicHordeEvents.EnableCataclysmScreenEffect
 {
     type = boolean,

@@ -59,6 +59,8 @@
   "Sandbox_DynamicHordeEvents_CataclysmAttractionVolume": "Cataclysm zombie attraction volume",
   "Sandbox_DynamicHordeEvents_EnableCataclysmWeather": "Enable cataclysm storm weather",
   "Sandbox_DynamicHordeEvents_EnableCataclysmWeather_tooltip": "Attempts to force severe weather when a cataclysm horde starts. Weather API behavior may vary between game versions.",
+  "Sandbox_DynamicHordeEvents_CataclysmWeatherDurationHours": "Cataclysm weather duration, hours",
+  "Sandbox_DynamicHordeEvents_CataclysmWeatherDurationHours_tooltip": "How long the cataclysm weather event should last. The mod first tries a tropical storm, then falls back to storm, rain, lightning, and custom weather calls if needed.",
   "Sandbox_DynamicHordeEvents_EnableCataclysmScreenEffect": "Enable cataclysm red screen effect",
   "Sandbox_DynamicHordeEvents_CataclysmScreenEffectSeconds": "Cataclysm screen effect duration, seconds"
 }

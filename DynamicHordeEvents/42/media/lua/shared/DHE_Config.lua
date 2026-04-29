@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.6.1-cataclysm-spawn-fix"
+DynamicHordeEvents.Version = "0.6.2-cataclysm-tropical-weather"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -49,6 +49,7 @@ DynamicHordeEvents.Defaults = {
     CataclysmAttractionRadius = 800,
     CataclysmAttractionVolume = 800,
     EnableCataclysmWeather = true,
+    CataclysmWeatherDurationHours = 8,
     EnableCataclysmScreenEffect = true,
     CataclysmScreenEffectSeconds = 15,
 }

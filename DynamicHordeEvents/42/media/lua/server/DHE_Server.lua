@@ -299,25 +299,82 @@ end
 local function triggerCataclysmWeather(player)
     if not DynamicHordeEvents.GetBool("EnableCataclysmWeather") then return end
 
-    -- B42 weather APIs can differ between SP/MP and minor versions. Try several safe calls.
-    local attempts = {
-        function()
-            local cm = getClimateManager()
-            if cm and cm.triggerCustomWeatherStage then cm:triggerCustomWeatherStage(3, 6) end
-        end,
-        function()
-            local cm = getClimateManager()
-            if cm and cm.transmitClimatePacket then cm:transmitClimatePacket() end
-        end,
-        function()
-            if getWorld and getWorld() and getWorld().setWeather then getWorld():setWeather("storm") end
-        end,
-    }
+    local duration = DynamicHordeEvents.GetNumber("CataclysmWeatherDurationHours")
+    if duration <= 0 then duration = 8 end
 
-    for _, fn in ipairs(attempts) do
-        pcall(fn)
+    local cm = nil
+    if getClimateManager then
+        local ok, result = pcall(function() return getClimateManager() end)
+        if ok then cm = result end
     end
-    sendDebug(player, "DHE: cataclysm weather trigger attempted")
+
+    local usedPrimaryWeather = false
+
+    local function tryWeather(label, fn)
+        local ok, err = pcall(fn)
+        if ok then
+            sendDebug(player, "DHE: cataclysm weather ok: " .. tostring(label))
+            return true
+        else
+            sendDebug(player, "DHE: cataclysm weather failed: " .. tostring(label) .. " | " .. tostring(err))
+            return false
+        end
+    end
+
+    -- Preferred B42 path: built-in tropical storm weather period.
+    -- This should naturally combine harsher rain/wind/fog-like conditions when available.
+    if cm and cm.transmitTriggerTropical then
+        usedPrimaryWeather = tryWeather("transmitTriggerTropical(" .. tostring(duration) .. ")", function()
+            cm:transmitTriggerTropical(duration)
+        end)
+    end
+
+    -- Fallback: hard storm / thunderstorm trigger if tropical is unavailable or fails.
+    if not usedPrimaryWeather and cm and cm.transmitTriggerStorm then
+        usedPrimaryWeather = tryWeather("transmitTriggerStorm(" .. tostring(duration) .. ")", function()
+            cm:transmitTriggerStorm(duration)
+        end)
+    end
+
+    if not usedPrimaryWeather and cm and cm.transmitServerTriggerStorm then
+        usedPrimaryWeather = tryWeather("transmitServerTriggerStorm(" .. tostring(duration) .. ")", function()
+            cm:transmitServerTriggerStorm(duration)
+        end)
+    end
+
+    -- Extra fallback layering. These are intentionally pcall-safe because B42 weather access
+    -- can vary by SP/MP context and minor version. They should not break the event.
+    if cm and cm.transmitServerStartRain then
+        tryWeather("transmitServerStartRain(1.0)", function()
+            cm:transmitServerStartRain(1.0)
+        end)
+    end
+
+    if cm and cm.triggerCustomWeather then
+        tryWeather("triggerCustomWeather(1.0, true)", function()
+            cm:triggerCustomWeather(1.0, true)
+        end)
+    end
+
+    if cm and cm.triggerCustomWeatherStage then
+        tryWeather("triggerCustomWeatherStage(3, " .. tostring(duration) .. ")", function()
+            cm:triggerCustomWeatherStage(3, duration)
+        end)
+    end
+
+    if cm and cm.transmitServerTriggerLightning and player then
+        tryWeather("transmitServerTriggerLightning", function()
+            cm:transmitServerTriggerLightning(math.floor(player:getX()), math.floor(player:getY()), true, true, true)
+        end)
+    end
+
+    if cm and cm.transmitClientChangeAdminVars then
+        tryWeather("transmitClientChangeAdminVars", function()
+            cm:transmitClientChangeAdminVars()
+        end)
+    end
+
+    sendDebug(player, "DHE: cataclysm severe weather trigger attempted, durationHours=" .. tostring(duration))
 end
 
 local function spawnZombieAt(x, y, z)
