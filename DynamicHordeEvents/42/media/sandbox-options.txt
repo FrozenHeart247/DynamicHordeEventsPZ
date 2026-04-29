@@ -244,7 +244,7 @@ option DynamicHordeEvents.CataclysmMinZombies
     type = integer,
     min = 1,
     max = 1000,
-    default = 150,
+    default = 200,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmMinZombies,
 }
@@ -254,7 +254,7 @@ option DynamicHordeEvents.CataclysmMaxZombies
     type = integer,
     min = 1,
     max = 1000,
-    default = 300,
+    default = 500,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmMaxZombies,
 }
@@ -284,7 +284,7 @@ option DynamicHordeEvents.CataclysmIndicatorSeconds
     type = integer,
     min = 1,
     max = 600,
-    default = 45,
+    default = 25,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmIndicatorSeconds,
 }
@@ -341,7 +341,7 @@ option DynamicHordeEvents.CataclysmFogIntensity
     type = double,
     min = 0.0,
     max = 1.0,
-    default = 0.75,
+    default = 1.0,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmFogIntensity,
 }
@@ -351,7 +351,7 @@ option DynamicHordeEvents.CataclysmWindIntensity
     type = double,
     min = 0.0,
     max = 1.0,
-    default = 1.0,
+    default = 0.75,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmWindIntensity,
 }
