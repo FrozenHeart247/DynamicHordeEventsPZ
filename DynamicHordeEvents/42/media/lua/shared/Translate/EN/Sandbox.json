@@ -1,51 +1,36 @@
 {
   "Sandbox_DynamicHordeEvents": "Dynamic Horde Events",
-
   "Sandbox_DynamicHordeEvents_Enabled": "Enable Dynamic Horde Events",
   "Sandbox_DynamicHordeEvents_MinSpawnHours": "Minimum hours before horde event",
   "Sandbox_DynamicHordeEvents_MaxSpawnHours": "Maximum hours before horde event",
   "Sandbox_DynamicHordeEvents_CooldownHours": "Cooldown after horde event, hours",
-
   "Sandbox_DynamicHordeEvents_MinZombies": "Minimum zombies per horde",
   "Sandbox_DynamicHordeEvents_MaxZombies": "Maximum zombies per horde",
-
   "Sandbox_DynamicHordeEvents_ScalingMode": "Horde size scaling mode",
   "Sandbox_DynamicHordeEvents_ScalingMode_tooltip": "Controls whether horde size increases over time. 1 Off disables scaling. 2 Days survived scales by survived days. 3 Months survived scales by survived months.",
- 
   "Sandbox_DynamicHordeEvents_ScalingInterval": "Scaling interval",
   "Sandbox_DynamicHordeEvents_ScalingInterval_tooltip": "How many days or months must pass before the horde size multiplier increases.",
-
   "Sandbox_DynamicHordeEvents_ScalingMultiplierPercent": "Scaling multiplier percent",
   "Sandbox_DynamicHordeEvents_ScalingMultiplierPercent_tooltip": "How much the horde size increases per scaling interval. Example: 25 means +25% per interval.",
-
   "Sandbox_DynamicHordeEvents_ScalingMaxMultiplierPercent": "Maximum scaling multiplier percent",
   "Sandbox_DynamicHordeEvents_ScalingMaxMultiplierPercent_tooltip": "Maximum total horde size multiplier. Example: 300 means the horde size can grow up to x3.",
-
   "Sandbox_DynamicHordeEvents_MinSpawnRadius": "Minimum spawn radius, tiles",
   "Sandbox_DynamicHordeEvents_MaxSpawnRadius": "Maximum spawn radius, tiles",
-
   "Sandbox_DynamicHordeEvents_DisableAtNight": "Disable horde events at night",
   "Sandbox_DynamicHordeEvents_NightStartHour": "Night start hour",
   "Sandbox_DynamicHordeEvents_NightEndHour": "Night end hour",
-
   "Sandbox_DynamicHordeEvents_EnableDirectionIndicator": "Show horde direction indicator",
   "Sandbox_DynamicHordeEvents_IndicatorSeconds": "Indicator duration, seconds",
-
   "Sandbox_DynamicHordeEvents_EnableWarningSound": "Play warning sound",
-
   "Sandbox_DynamicHordeEvents_AttractionRadius": "Zombie attraction radius",
   "Sandbox_DynamicHordeEvents_AttractionVolume": "Zombie attraction volume",
-
   "Sandbox_DynamicHordeEvents_AvoidIndoorSpawn": "Avoid indoor spawn squares",
   "Sandbox_DynamicHordeEvents_SpawnSearchAttempts": "Spawn search attempts",
-
   "Sandbox_DynamicHordeEvents_Debug": "Enable debug logging",
   "Sandbox_DynamicHordeEvents_EnableDebugContextMenu": "Enable right-click debug menu",
   "Sandbox_DynamicHordeEvents_EnableDebugHotkey": "Enable debug hotkeys",
-
   "Sandbox_DynamicHordeEvents_TestSpawnRadius": "Debug test spawn radius",
   "Sandbox_DynamicHordeEvents_TestZombieCount": "Debug test zombie count",
-
   "Sandbox_DynamicHordeEvents_EnableCataclysmHorde": "Enable cataclysm horde event",
   "Sandbox_DynamicHordeEvents_EnableCataclysmHorde_tooltip": "Enables a rare ultra-hardcore horde event with its own timer and warning indicator.",
   "Sandbox_DynamicHordeEvents_CataclysmMinDays": "Minimum days before cataclysm horde",
@@ -62,5 +47,15 @@
   "Sandbox_DynamicHordeEvents_CataclysmWeatherDurationHours": "Cataclysm weather duration, hours",
   "Sandbox_DynamicHordeEvents_CataclysmWeatherDurationHours_tooltip": "How long the cataclysm weather event should last. The mod first tries a tropical storm, then falls back to storm, rain, lightning, and custom weather calls if needed.",
   "Sandbox_DynamicHordeEvents_EnableCataclysmScreenEffect": "Enable cataclysm red screen effect",
-  "Sandbox_DynamicHordeEvents_CataclysmScreenEffectSeconds": "Cataclysm screen effect duration, seconds"
+  "Sandbox_DynamicHordeEvents_CataclysmScreenEffectSeconds": "Cataclysm screen effect duration, seconds",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmFogWind": "Force fog and wind during cataclysm weather",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmFogWind_tooltip": "Adds climate overrides on top of the tropical storm: fog, strong wind, heavy clouds and desaturation. Overrides are reset after the cataclysm weather duration.",
+  "Sandbox_DynamicHordeEvents_CataclysmFogIntensity": "Cataclysm fog intensity",
+  "Sandbox_DynamicHordeEvents_CataclysmFogIntensity_tooltip": "Fog intensity forced during cataclysm weather. 0 disables extra fog, 1 is maximum fog.",
+  "Sandbox_DynamicHordeEvents_CataclysmWindIntensity": "Cataclysm wind intensity",
+  "Sandbox_DynamicHordeEvents_CataclysmWindIntensity_tooltip": "Wind intensity forced during cataclysm weather. 0 disables extra wind, 1 is maximum wind.",
+  "Sandbox_DynamicHordeEvents_CataclysmCloudIntensity": "Cataclysm cloud intensity",
+  "Sandbox_DynamicHordeEvents_CataclysmCloudIntensity_tooltip": "Cloud intensity forced during cataclysm weather. Higher values make the storm look darker and heavier.",
+  "Sandbox_DynamicHordeEvents_CataclysmDesaturation": "Cataclysm desaturation",
+  "Sandbox_DynamicHordeEvents_CataclysmDesaturation_tooltip": "Visual desaturation during cataclysm weather. Higher values make the world look more bleak and storm-heavy."
 }

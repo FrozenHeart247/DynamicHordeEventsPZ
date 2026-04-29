@@ -328,6 +328,54 @@ option DynamicHordeEvents.CataclysmWeatherDurationHours
     translation = DynamicHordeEvents_CataclysmWeatherDurationHours,
 }
 
+option DynamicHordeEvents.EnableCataclysmFogWind
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmFogWind,
+}
+
+option DynamicHordeEvents.CataclysmFogIntensity
+{
+    type = double,
+    min = 0.0,
+    max = 1.0,
+    default = 0.75,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmFogIntensity,
+}
+
+option DynamicHordeEvents.CataclysmWindIntensity
+{
+    type = double,
+    min = 0.0,
+    max = 1.0,
+    default = 1.0,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmWindIntensity,
+}
+
+option DynamicHordeEvents.CataclysmCloudIntensity
+{
+    type = double,
+    min = 0.0,
+    max = 1.0,
+    default = 1.0,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmCloudIntensity,
+}
+
+option DynamicHordeEvents.CataclysmDesaturation
+{
+    type = double,
+    min = 0.0,
+    max = 1.0,
+    default = 0.45,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmDesaturation,
+}
+
 option DynamicHordeEvents.EnableCataclysmScreenEffect
 {
     type = boolean,

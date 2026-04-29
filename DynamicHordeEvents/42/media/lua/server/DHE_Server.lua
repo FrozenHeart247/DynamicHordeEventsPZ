@@ -9,6 +9,7 @@ local nextSpawnHour = nil
 local lastSpawnHour = -999999
 local nextCataclysmDay = nil
 local lastCataclysmDay = -999999
+local cataclysmWeatherAdminResetHour = nil
 
 local function clampRange(minValue, maxValue)
     minValue = math.floor(tonumber(minValue) or 0)
@@ -296,6 +297,131 @@ local function attractCataclysmToPlayer(player)
     end
 end
 
+local function getClimateFloatConstant(cm, name, fallback)
+    local value = nil
+
+    if ClimateManager and ClimateManager[name] ~= nil then
+        value = ClimateManager[name]
+    elseif cm and cm[name] ~= nil then
+        value = cm[name]
+    end
+
+    if value == nil then value = fallback end
+    return value
+end
+
+local function setClimateAdminFloat(player, cm, label, id, value)
+    if not cm or id == nil then
+        sendDebug(player, "DHE: cataclysm weather admin skipped: " .. tostring(label) .. " id=nil")
+        return false
+    end
+
+    local ok, err = pcall(function()
+        local cf = cm:getClimateFloat(id)
+        if not cf then error("climate float is nil") end
+
+        if cf.setAdminValue then
+            cf:setAdminValue(value)
+        elseif cf.setOverride then
+            cf:setOverride(value)
+        elseif cf.setModdedValue then
+            cf:setModdedValue(value)
+        else
+            error("no supported setter")
+        end
+
+        if cf.setEnableAdmin then
+            cf:setEnableAdmin(true)
+        elseif cf.setEnableOverride then
+            cf:setEnableOverride(true)
+        elseif cf.setEnableModded then
+            cf:setEnableModded(true)
+        end
+    end)
+
+    if ok then
+        sendDebug(player, "DHE: cataclysm weather admin ok: " .. tostring(label) .. "=" .. tostring(value))
+        return true
+    end
+
+    sendDebug(player, "DHE: cataclysm weather admin failed: " .. tostring(label) .. " | " .. tostring(err))
+    return false
+end
+
+local function resetCataclysmWeatherOverrides(player)
+    local cm = nil
+    if getClimateManager then
+        local ok, result = pcall(function() return getClimateManager() end)
+        if ok then cm = result end
+    end
+    if not cm then return end
+
+    local ids = {
+        getClimateFloatConstant(cm, "FLOAT_FOG_INTENSITY", 5),
+        getClimateFloatConstant(cm, "FLOAT_WIND_INTENSITY", 6),
+        getClimateFloatConstant(cm, "FLOAT_WIND_ANGLE_INTENSITY", 7),
+        getClimateFloatConstant(cm, "FLOAT_CLOUD_INTENSITY", 8),
+        getClimateFloatConstant(cm, "FLOAT_DESATURATION", 0),
+        getClimateFloatConstant(cm, "FLOAT_VIEW_DISTANCE", 10),
+    }
+
+    for _, id in ipairs(ids) do
+        pcall(function()
+            local cf = cm:getClimateFloat(id)
+            if cf then
+                if cf.setEnableAdmin then cf:setEnableAdmin(false) end
+                if cf.setEnableOverride then cf:setEnableOverride(false) end
+                if cf.setEnableModded then cf:setEnableModded(false) end
+            end
+        end)
+    end
+
+    pcall(function()
+        if cm.transmitClientChangeAdminVars then
+            cm:transmitClientChangeAdminVars()
+        end
+    end)
+
+    cataclysmWeatherAdminResetHour = nil
+    sendDebug(player, "DHE: cataclysm fog/wind admin overrides reset.")
+end
+
+local function applyCataclysmFogWindOverrides(player, cm, duration)
+    if not DynamicHordeEvents.GetBool("EnableCataclysmFogWind") then return end
+    if not cm then return end
+
+    local fog = DynamicHordeEvents.GetNumber("CataclysmFogIntensity")
+    local wind = DynamicHordeEvents.GetNumber("CataclysmWindIntensity")
+    local clouds = DynamicHordeEvents.GetNumber("CataclysmCloudIntensity")
+    local desat = DynamicHordeEvents.GetNumber("CataclysmDesaturation")
+
+    if fog < 0 then fog = 0 elseif fog > 1 then fog = 1 end
+    if wind < 0 then wind = 0 elseif wind > 1 then wind = 1 end
+    if clouds < 0 then clouds = 0 elseif clouds > 1 then clouds = 1 end
+    if desat < 0 then desat = 0 elseif desat > 1 then desat = 1 end
+
+    setClimateAdminFloat(player, cm, "fog", getClimateFloatConstant(cm, "FLOAT_FOG_INTENSITY", 5), fog)
+    setClimateAdminFloat(player, cm, "wind", getClimateFloatConstant(cm, "FLOAT_WIND_INTENSITY", 6), wind)
+    setClimateAdminFloat(player, cm, "windAngle", getClimateFloatConstant(cm, "FLOAT_WIND_ANGLE_INTENSITY", 7), 1.0)
+    setClimateAdminFloat(player, cm, "clouds", getClimateFloatConstant(cm, "FLOAT_CLOUD_INTENSITY", 8), clouds)
+    setClimateAdminFloat(player, cm, "desaturation", getClimateFloatConstant(cm, "FLOAT_DESATURATION", 0), desat)
+
+    -- Lower view distance a bit during the cataclysm if fog is high. This is safe-wrapped by setClimateAdminFloat.
+    if fog >= 0.60 then
+        setClimateAdminFloat(player, cm, "viewDistance", getClimateFloatConstant(cm, "FLOAT_VIEW_DISTANCE", 10), 0.45)
+    end
+
+    if getGameTime then
+        local currentHour = getGameTime():getWorldAgeHours()
+        cataclysmWeatherAdminResetHour = currentHour + math.max(1, duration)
+        sendDebug(player, "DHE: cataclysm fog/wind override reset scheduled at worldHour=" .. tostring(cataclysmWeatherAdminResetHour))
+    end
+
+    if cm.transmitClientChangeAdminVars then
+        pcall(function() cm:transmitClientChangeAdminVars() end)
+    end
+end
+
 local function triggerCataclysmWeather(player)
     if not DynamicHordeEvents.GetBool("EnableCataclysmWeather") then return end
 
@@ -322,7 +448,6 @@ local function triggerCataclysmWeather(player)
     end
 
     -- Preferred B42 path: built-in tropical storm weather period.
-    -- This should naturally combine harsher rain/wind/fog-like conditions when available.
     if cm and cm.transmitTriggerTropical then
         usedPrimaryWeather = tryWeather("transmitTriggerTropical(" .. tostring(duration) .. ")", function()
             cm:transmitTriggerTropical(duration)
@@ -341,6 +466,10 @@ local function triggerCataclysmWeather(player)
             cm:transmitServerTriggerStorm(duration)
         end)
     end
+
+    -- Layer additional fog / wind / dark-cloud atmosphere over the tropical storm.
+    -- Uses admin climate floats because modded/override floats can be ignored by normal weather updates.
+    applyCataclysmFogWindOverrides(player, cm, duration)
 
     -- Extra fallback layering. These are intentionally pcall-safe because B42 weather access
     -- can vary by SP/MP context and minor version. They should not break the event.
@@ -601,6 +730,10 @@ end
 
 function DynamicHordeEvents.Server.Update()
     if not DynamicHordeEvents.GetBool("Enabled") then return end
+
+    if cataclysmWeatherAdminResetHour ~= nil and getGameTime and getGameTime():getWorldAgeHours() >= cataclysmWeatherAdminResetHour then
+        resetCataclysmWeatherOverrides(nil)
+    end
 
     if nextSpawnHour == nil then
         scheduleNextSpawn(nil)
