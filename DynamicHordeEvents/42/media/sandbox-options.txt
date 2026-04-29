@@ -394,6 +394,22 @@ option DynamicHordeEvents.CataclysmScreenEffectSeconds
     translation = DynamicHordeEvents_CataclysmScreenEffectSeconds,
 }
 
+option DynamicHordeEvents.EnableNormalHordeSpeech
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableNormalHordeSpeech,
+}
+
+option DynamicHordeEvents.EnableCataclysmHordeSpeech
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmHordeSpeech,
+}
+
 option DynamicHordeEvents.Debug
 {
     type = boolean,

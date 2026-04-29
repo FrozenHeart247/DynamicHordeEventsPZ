@@ -57,5 +57,9 @@
   "Sandbox_DynamicHordeEvents_CataclysmCloudIntensity": "Cataclysm cloud intensity",
   "Sandbox_DynamicHordeEvents_CataclysmCloudIntensity_tooltip": "Cloud intensity forced during cataclysm weather. Higher values make the storm look darker and heavier.",
   "Sandbox_DynamicHordeEvents_CataclysmDesaturation": "Cataclysm desaturation",
-  "Sandbox_DynamicHordeEvents_CataclysmDesaturation_tooltip": "Visual desaturation during cataclysm weather. Higher values make the world look more bleak and storm-heavy."
+  "Sandbox_DynamicHordeEvents_CataclysmDesaturation_tooltip": "Visual desaturation during cataclysm weather. Higher values make the world look more bleak and storm-heavy.",
+  "Sandbox_DynamicHordeEvents_EnableNormalHordeSpeech": "Enable normal horde survivor lines",
+  "Sandbox_DynamicHordeEvents_EnableNormalHordeSpeech_tooltip": "When a normal horde event starts, the player character says a short random warning line above their head.",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmHordeSpeech": "Enable cataclysm horde survivor lines",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmHordeSpeech_tooltip": "When a cataclysm horde event starts, the player character says a more intense random warning line above their head."
 }

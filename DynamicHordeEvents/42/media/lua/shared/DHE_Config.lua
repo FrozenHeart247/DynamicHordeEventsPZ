@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.6.3-cataclysm-fog-wind"
+DynamicHordeEvents.Version = "0.6.5-horde-speech-debug-fix"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -57,6 +57,10 @@ DynamicHordeEvents.Defaults = {
     CataclysmDesaturation = 0.45,
     EnableCataclysmScreenEffect = true,
     CataclysmScreenEffectSeconds = 15,
+
+    -- Short survivor voice lines shown above the player when a real event starts.
+    EnableNormalHordeSpeech = true,
+    EnableCataclysmHordeSpeech = true,
 }
 
 local function readSandboxValue(key)

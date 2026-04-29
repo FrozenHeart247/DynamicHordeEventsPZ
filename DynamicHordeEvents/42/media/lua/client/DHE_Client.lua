@@ -8,9 +8,72 @@ DynamicHordeEvents.Client.Target = nil
 DynamicHordeEvents.Client.LastMessage = nil
 DynamicHordeEvents.Client.LastMessageAt = 0
 DynamicHordeEvents.Client.LastPendingHandledAt = 0
+DynamicHordeEvents.Client.PendingSpeech = nil
 
 local function getPlayer()
     return getSpecificPlayer(0)
+end
+
+
+local NORMAL_HORDE_LINES = {
+    "Fuck... I hear a horde nearby. I think they're coming here.",
+    "Shit. That's not just wandering. They're heading this way.",
+    "Great. A whole damn crowd, and of course they found me.",
+    "I hear them. Too many footsteps... way too close.",
+}
+
+local CATACLYSM_HORDE_LINES = {
+    "Fuck, fuck, fuck... I really don't like the sound of that.",
+    "Shit... sounds like the whole city is coming for my ass.",
+    "God damn it, why right now? Fight them or run?",
+    "No. No, that's not a horde. That's a fucking wall of dead.",
+}
+
+local function randomLine(lines)
+    if not lines or #lines == 0 then return nil end
+    local index = ZombRand(1, #lines + 1)
+    return lines[index]
+end
+
+function DynamicHordeEvents.Client.SayHordeLine(eventType)
+    local player = getPlayer()
+    if not player then return end
+
+    local line = nil
+    if tostring(eventType or "normal") == "cataclysm" then
+        if not DynamicHordeEvents.GetBool("EnableCataclysmHordeSpeech") then return end
+        line = randomLine(CATACLYSM_HORDE_LINES)
+    else
+        if not DynamicHordeEvents.GetBool("EnableNormalHordeSpeech") then return end
+        line = randomLine(NORMAL_HORDE_LINES)
+    end
+
+    if line and line ~= "" then
+        local ok, err = pcall(function() player:Say(line) end)
+        if ok then
+            DynamicHordeEvents.DebugPrint("DHE: horde speech said: " .. tostring(line))
+        else
+            DynamicHordeEvents.DebugPrint("DHE: horde speech failed: " .. tostring(err))
+        end
+    end
+end
+
+function DynamicHordeEvents.Client.QueueHordeLine(eventType)
+    -- Delay survivor speech a little so debug ShowMessage/player:Say calls do not overwrite it instantly.
+    DynamicHordeEvents.Client.PendingSpeech = {
+        eventType = tostring(eventType or "normal"),
+        speakAtMs = getTimestampMs() + 900,
+    }
+    DynamicHordeEvents.DebugPrint("DHE: horde speech queued: " .. tostring(eventType or "normal"))
+end
+
+function DynamicHordeEvents.Client.ProcessPendingSpeech()
+    local pending = DynamicHordeEvents.Client.PendingSpeech
+    if not pending then return end
+    if getTimestampMs() < (tonumber(pending.speakAtMs) or 0) then return end
+
+    DynamicHordeEvents.Client.PendingSpeech = nil
+    DynamicHordeEvents.Client.SayHordeLine(pending.eventType)
 end
 
 function DynamicHordeEvents.Client.ShowMessage(text)
@@ -108,6 +171,7 @@ function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
         eventType = tostring(args.eventType or "normal"),
         screenEffectSeconds = tonumber(args.screenEffectSeconds) or 0,
     }
+    if not args.debugOnly then DynamicHordeEvents.Client.QueueHordeLine(DynamicHordeEvents.Client.Target.eventType) end
     if not silent then DynamicHordeEvents.Client.PlayWarningSound() end
     DynamicHordeEvents.Client.ShowMessage("DHE: target set, count=" .. tostring(DynamicHordeEvents.Client.Target.count))
 end
@@ -179,6 +243,7 @@ end
 
 
 function DynamicHordeEvents.Client.ConsumePendingIncoming()
+    DynamicHordeEvents.Client.ProcessPendingSpeech()
     local pending = DynamicHordeEvents.PendingIncoming
     if not pending then return end
 
@@ -209,5 +274,6 @@ Events.OnServerCommand.Add(DynamicHordeEvents.Client.OnServerCommand)
 
 Events.OnGameStart.Add(function()
     DynamicHordeEvents.Client.Target = nil
+    DynamicHordeEvents.Client.PendingSpeech = nil
     DynamicHordeEvents.DebugPrint("DHE client loaded " .. tostring(DynamicHordeEvents.Version))
 end)
