@@ -17,9 +17,14 @@ end
 
 local NORMAL_HORDE_LINES = {
     "Fuck... I hear a horde nearby. I think they're coming here.",
-    "Shit. That's not just wandering. They're heading this way.",
+    "Shit. That's not just wandering. They're heading this way!",
     "Great. A whole damn crowd, and of course they found me.",
     "I hear them. Too many footsteps... way too close.",
+    "I heard something over there. Should stay careful",
+    "Goddamn wanderers. Why can't you just die. Oh, right they're already dead.",
+    "Yeah fuckers! Come and get me!",
+    "Yeah I like company but not that sort of a company.",
+    "Hey... Isn't it... I.. I know that guy.... Gotta make a proper burials for him",
 }
 
 local CATACLYSM_HORDE_LINES = {
@@ -27,6 +32,8 @@ local CATACLYSM_HORDE_LINES = {
     "Shit... sounds like the whole city is coming for my ass.",
     "God damn it, why right now? Fight them or run?",
     "No. No, that's not a horde. That's a fucking wall of dead.",
+    "Yeah, this sounds like trouble, grave trouble. Should've written a will earlier",
+    "Fuuuuuuck! Why can't you sit in one place?'. I'll need a good bottle of whiskey after that... If I survive",
 }
 
 local function randomLine(lines)
