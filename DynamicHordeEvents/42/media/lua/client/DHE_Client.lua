@@ -92,7 +92,11 @@ end
 function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
     args = args or {}
     local now = getTimestampMs()
-    local lifeMs = math.max(5000, DynamicHordeEvents.GetNumber("IndicatorSeconds") * 1000)
+    local indicatorSeconds = DynamicHordeEvents.GetNumber("IndicatorSeconds")
+    if args.eventType == "cataclysm" then
+        indicatorSeconds = DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds")
+    end
+    local lifeMs = math.max(5000, indicatorSeconds * 1000)
     DynamicHordeEvents.Client.Target = {
         x = tonumber(args.x) or 0,
         y = tonumber(args.y) or 0,
@@ -101,6 +105,8 @@ function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
         createdAtMs = now,
         expiresAtMs = now + lifeMs,
         debugOnly = args.debugOnly == true,
+        eventType = tostring(args.eventType or "normal"),
+        screenEffectSeconds = tonumber(args.screenEffectSeconds) or 0,
     }
     if not silent then DynamicHordeEvents.Client.PlayWarningSound() end
     DynamicHordeEvents.Client.ShowMessage("DHE: target set, count=" .. tostring(DynamicHordeEvents.Client.Target.count))
@@ -130,6 +136,30 @@ function DynamicHordeEvents.Client.TestIndicatorAndSound()
     DynamicHordeEvents.Client.TestUIOnly()
     DynamicHordeEvents.Client.PlayWarningSound()
     DynamicHordeEvents.Client.ShowMessage("DHE: UI + sound local test fired")
+end
+
+function DynamicHordeEvents.Client.TestCataclysmUIOnly()
+    local player = getPlayer()
+    if not player then
+        DynamicHordeEvents.Client.ShowMessage("DHE: no player for cataclysm UI test")
+        return
+    end
+    DynamicHordeEvents.Client.SetIncomingTarget({
+        x = player:getX() - 80,
+        y = player:getY() + 45,
+        z = player:getZ(),
+        count = 250,
+        debugOnly = true,
+        eventType = "cataclysm",
+        screenEffectSeconds = DynamicHordeEvents.GetNumber("CataclysmScreenEffectSeconds"),
+    }, true)
+    DynamicHordeEvents.Client.ShowMessage("DHE: cataclysm UI-only test target created")
+end
+
+function DynamicHordeEvents.Client.TestCataclysmIndicatorAndSound()
+    DynamicHordeEvents.Client.TestCataclysmUIOnly()
+    DynamicHordeEvents.Client.PlayWarningSound()
+    DynamicHordeEvents.Client.ShowMessage("DHE: cataclysm UI + sound local test fired")
 end
 
 function DynamicHordeEvents.Client.ClearTarget()

@@ -210,6 +210,131 @@ option DynamicHordeEvents.SpawnSearchAttempts
     translation = DynamicHordeEvents_SpawnSearchAttempts,
 }
 
+
+option DynamicHordeEvents.EnableCataclysmHorde
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmHorde,
+}
+
+option DynamicHordeEvents.CataclysmMinDays
+{
+    type = integer,
+    min = 1,
+    max = 3650,
+    default = 90,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMinDays,
+}
+
+option DynamicHordeEvents.CataclysmMaxDays
+{
+    type = integer,
+    min = 1,
+    max = 3650,
+    default = 120,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMaxDays,
+}
+
+option DynamicHordeEvents.CataclysmMinZombies
+{
+    type = integer,
+    min = 1,
+    max = 1000,
+    default = 150,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMinZombies,
+}
+
+option DynamicHordeEvents.CataclysmMaxZombies
+{
+    type = integer,
+    min = 1,
+    max = 1000,
+    default = 300,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMaxZombies,
+}
+
+option DynamicHordeEvents.CataclysmMinSpawnRadius
+{
+    type = integer,
+    min = 10,
+    max = 500,
+    default = 140,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMinSpawnRadius,
+}
+
+option DynamicHordeEvents.CataclysmMaxSpawnRadius
+{
+    type = integer,
+    min = 10,
+    max = 500,
+    default = 240,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmMaxSpawnRadius,
+}
+
+option DynamicHordeEvents.CataclysmIndicatorSeconds
+{
+    type = integer,
+    min = 1,
+    max = 600,
+    default = 45,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmIndicatorSeconds,
+}
+
+option DynamicHordeEvents.CataclysmAttractionRadius
+{
+    type = integer,
+    min = 10,
+    max = 2000,
+    default = 800,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmAttractionRadius,
+}
+
+option DynamicHordeEvents.CataclysmAttractionVolume
+{
+    type = integer,
+    min = 10,
+    max = 2000,
+    default = 800,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmAttractionVolume,
+}
+
+option DynamicHordeEvents.EnableCataclysmWeather
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmWeather,
+}
+
+option DynamicHordeEvents.EnableCataclysmScreenEffect
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmScreenEffect,
+}
+
+option DynamicHordeEvents.CataclysmScreenEffectSeconds
+{
+    type = integer,
+    min = 0,
+    max = 120,
+    default = 15,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmScreenEffectSeconds,
+}
+
 option DynamicHordeEvents.Debug
 {
     type = boolean,

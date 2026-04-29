@@ -44,5 +44,21 @@
   "Sandbox_DynamicHordeEvents_EnableDebugHotkey": "Enable debug hotkeys",
 
   "Sandbox_DynamicHordeEvents_TestSpawnRadius": "Debug test spawn radius",
-  "Sandbox_DynamicHordeEvents_TestZombieCount": "Debug test zombie count"
+  "Sandbox_DynamicHordeEvents_TestZombieCount": "Debug test zombie count",
+
+  "Sandbox_DynamicHordeEvents_EnableCataclysmHorde": "Enable cataclysm horde event",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmHorde_tooltip": "Enables a rare ultra-hardcore horde event with its own timer and warning indicator.",
+  "Sandbox_DynamicHordeEvents_CataclysmMinDays": "Minimum days before cataclysm horde",
+  "Sandbox_DynamicHordeEvents_CataclysmMaxDays": "Maximum days before cataclysm horde",
+  "Sandbox_DynamicHordeEvents_CataclysmMinZombies": "Minimum zombies in cataclysm horde",
+  "Sandbox_DynamicHordeEvents_CataclysmMaxZombies": "Maximum zombies in cataclysm horde",
+  "Sandbox_DynamicHordeEvents_CataclysmMinSpawnRadius": "Cataclysm minimum spawn radius, tiles",
+  "Sandbox_DynamicHordeEvents_CataclysmMaxSpawnRadius": "Cataclysm maximum spawn radius, tiles",
+  "Sandbox_DynamicHordeEvents_CataclysmIndicatorSeconds": "Cataclysm indicator duration, seconds",
+  "Sandbox_DynamicHordeEvents_CataclysmAttractionRadius": "Cataclysm zombie attraction radius",
+  "Sandbox_DynamicHordeEvents_CataclysmAttractionVolume": "Cataclysm zombie attraction volume",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmWeather": "Enable cataclysm storm weather",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmWeather_tooltip": "Attempts to force severe weather when a cataclysm horde starts. Weather API behavior may vary between game versions.",
+  "Sandbox_DynamicHordeEvents_EnableCataclysmScreenEffect": "Enable cataclysm red screen effect",
+  "Sandbox_DynamicHordeEvents_CataclysmScreenEffectSeconds": "Cataclysm screen effect duration, seconds"
 }

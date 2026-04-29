@@ -7,6 +7,8 @@ DynamicHordeEvents.Server = DynamicHordeEvents.Server or {}
 
 local nextSpawnHour = nil
 local lastSpawnHour = -999999
+local nextCataclysmDay = nil
+local lastCataclysmDay = -999999
 
 local function clampRange(minValue, maxValue)
     minValue = math.floor(tonumber(minValue) or 0)
@@ -87,6 +89,15 @@ local function scheduleNextSpawn(playerForDebug)
 
     nextSpawnHour = getGameTime():getWorldAgeHours() + delay
     sendDebug(playerForDebug, "DHE: next random horde in " .. tostring(delay) .. " hour(s). targetWorldHour=" .. tostring(nextSpawnHour))
+end
+
+local function scheduleNextCataclysm(playerForDebug)
+    local minDays = DynamicHordeEvents.GetNumber("CataclysmMinDays")
+    local maxDays = DynamicHordeEvents.GetNumber("CataclysmMaxDays")
+    local delay = randomBetween(minDays, maxDays)
+
+    nextCataclysmDay = getWorldDaysSurvived() + delay
+    sendDebug(playerForDebug, "DHE: next cataclysm horde in " .. tostring(delay) .. " day(s). targetWorldDay=" .. tostring(nextCataclysmDay))
 end
 
 local function getPlayerList()
@@ -176,6 +187,93 @@ local function findSpawnSquare(player, forceNear)
     return nil
 end
 
+local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
+    local playerSquare = player:getSquare()
+    if not playerSquare then return nil end
+
+    minRadius = math.max(10, tonumber(minRadius) or 10)
+    maxRadius = math.max(minRadius, tonumber(maxRadius) or minRadius)
+    attempts = math.max(1, tonumber(attempts) or 64)
+
+    local px = playerSquare:getX()
+    local py = playerSquare:getY()
+    local pz = playerSquare:getZ()
+
+    -- B42 only exposes already-loaded grid squares here. A 140-240 tile cataclysm radius
+    -- can easily point into unloaded chunks and return nil forever. Try the requested
+    -- radius first, then progressively fall back to closer loaded rings.
+    local zCandidates = { pz }
+    if pz ~= 0 then table.insert(zCandidates, 0) end
+
+    local function tryRandomRing(rMin, rMax, tryCount, strictOutdoor)
+        for _, z in ipairs(zCandidates) do
+            for _ = 1, tryCount do
+                local radius = randomBetween(rMin, rMax)
+                local angle = ZombRandFloat(0.0, math.pi * 2.0)
+                local x = math.floor(px + math.cos(angle) * radius)
+                local y = math.floor(py + math.sin(angle) * radius)
+                local square = getCell():getGridSquare(x, y, z)
+                if square then
+                    if squareIsUsable(square) then return square end
+                    if not strictOutdoor then
+                        local solid = false
+                        pcall(function() solid = square:isSolid() end)
+                        if not solid then return square end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- 1) requested cataclysm distance
+    local square = tryRandomRing(minRadius, maxRadius, attempts, true)
+    if square then return square end
+
+    -- 2) normal horde distance, usually more likely to be loaded
+    square = tryRandomRing(
+        DynamicHordeEvents.GetNumber("MinSpawnRadius"),
+        DynamicHordeEvents.GetNumber("MaxSpawnRadius"),
+        attempts,
+        true
+    )
+    if square then return square end
+
+    -- 3) closer emergency distance for debug / dense towns / indoor starts
+    square = tryRandomRing(35, math.max(60, math.floor(minRadius / 2)), attempts, true)
+    if square then return square end
+
+    -- 4) last resort: allow non-solid indoor/covered squares, otherwise the whole event dies.
+    square = tryRandomRing(20, math.max(40, math.floor(minRadius / 3)), attempts, false)
+    if square then return square end
+
+    return nil
+end
+
+local function findNearbySpawnableSquare(x, y, z, spread)
+    spread = math.max(1, math.floor(tonumber(spread) or 1))
+
+    local square = getCell():getGridSquare(x, y, z)
+    if squareIsUsable(square) then return square end
+
+    for _ = 1, 8 do
+        local ox = x + ZombRand(-spread, spread + 1)
+        local oy = y + ZombRand(-spread, spread + 1)
+        square = getCell():getGridSquare(ox, oy, z)
+        if squareIsUsable(square) then return square end
+    end
+
+    -- fallback for indoor/covered loaded cells: non-solid is better than spawning nothing.
+    square = getCell():getGridSquare(x, y, z)
+    if square then
+        local solid = false
+        pcall(function() solid = square:isSolid() end)
+        if not solid then return square end
+    end
+
+    return nil
+end
+
 local function attractHordeToPlayer(player)
     local radius = DynamicHordeEvents.GetNumber("AttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("AttractionVolume")
@@ -185,6 +283,41 @@ local function attractHordeToPlayer(player)
     if not ok then
         sendDebug(player, "DHE: addSound failed: " .. tostring(err))
     end
+end
+
+local function attractCataclysmToPlayer(player)
+    local radius = DynamicHordeEvents.GetNumber("CataclysmAttractionRadius")
+    local volume = DynamicHordeEvents.GetNumber("CataclysmAttractionVolume")
+    local ok, err = pcall(function()
+        addSound(player, player:getX(), player:getY(), player:getZ(), radius, volume)
+    end)
+    if not ok then
+        sendDebug(player, "DHE: cataclysm addSound failed: " .. tostring(err))
+    end
+end
+
+local function triggerCataclysmWeather(player)
+    if not DynamicHordeEvents.GetBool("EnableCataclysmWeather") then return end
+
+    -- B42 weather APIs can differ between SP/MP and minor versions. Try several safe calls.
+    local attempts = {
+        function()
+            local cm = getClimateManager()
+            if cm and cm.triggerCustomWeatherStage then cm:triggerCustomWeatherStage(3, 6) end
+        end,
+        function()
+            local cm = getClimateManager()
+            if cm and cm.transmitClimatePacket then cm:transmitClimatePacket() end
+        end,
+        function()
+            if getWorld and getWorld() and getWorld().setWeather then getWorld():setWeather("storm") end
+        end,
+    }
+
+    for _, fn in ipairs(attempts) do
+        pcall(fn)
+    end
+    sendDebug(player, "DHE: cataclysm weather trigger attempted")
 end
 
 local function spawnZombieAt(x, y, z)
@@ -210,12 +343,15 @@ local function spawnZombieAt(x, y, z)
     return success, lastErr
 end
 
-local function notifyPlayer(player, sx, sy, sz, count)
+local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSeconds, screenEffectSeconds)
     local payload = {
         x = sx,
         y = sy,
         z = sz,
         count = count,
+        eventType = tostring(eventType or "normal"),
+        indicatorSeconds = indicatorSeconds,
+        screenEffectSeconds = screenEffectSeconds,
     }
 
     local delivered = false
@@ -241,6 +377,9 @@ local function notifyPlayer(player, sx, sy, sz, count)
             y = payload.y,
             z = payload.z,
             count = payload.count,
+            eventType = payload.eventType,
+            indicatorSeconds = payload.indicatorSeconds,
+            screenEffectSeconds = payload.screenEffectSeconds,
             createdAtMs = getTimestampMs(),
             source = "server-pending-fallback",
         }
@@ -293,7 +432,7 @@ local function spawnHorde(player, forceNear, forceCount)
     end
 
     attractHordeToPlayer(player)
-    notifyPlayer(player, sx, sy, sz, spawned)
+    notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
 
     lastSpawnHour = getGameTime():getWorldAgeHours()
     scheduleNextSpawn(player)
@@ -310,15 +449,119 @@ local function spawnHorde(player, forceNear, forceCount)
     return spawned > 0
 end
 
+local function spawnCataclysmHorde(player)
+    if not player then return false end
+
+    local spawnSquare = findSpawnSquareCustom(
+        player,
+        DynamicHordeEvents.GetNumber("CataclysmMinSpawnRadius"),
+        DynamicHordeEvents.GetNumber("CataclysmMaxSpawnRadius"),
+        DynamicHordeEvents.GetNumber("SpawnSearchAttempts")
+    )
+
+    if not spawnSquare then
+        sendDebug(player, "DHE: failed to find cataclysm spawn square.")
+        return false
+    end
+
+    local count = randomBetween(
+        DynamicHordeEvents.GetNumber("CataclysmMinZombies"),
+        DynamicHordeEvents.GetNumber("CataclysmMaxZombies")
+    )
+
+    local sx = spawnSquare:getX()
+    local sy = spawnSquare:getY()
+    local sz = spawnSquare:getZ()
+
+    local playerSquare = player:getSquare()
+    local px, py = player:getX(), player:getY()
+    if playerSquare then px, py = playerSquare:getX(), playerSquare:getY() end
+
+    local angle = math.atan2(sy - py, sx - px)
+    local perpX = math.cos(angle + math.pi / 2.0)
+    local perpY = math.sin(angle + math.pi / 2.0)
+
+    local mainCount = math.floor(count * 0.60)
+    local leftCount = math.floor(count * 0.20)
+    local rightCount = count - mainCount - leftCount
+
+    local clusters = {
+        { x = sx, y = sy, count = mainCount, spread = 10 },
+        { x = sx + math.floor(perpX * 18), y = sy + math.floor(perpY * 18), count = leftCount, spread = 8 },
+        { x = sx - math.floor(perpX * 18), y = sy - math.floor(perpY * 18), count = rightCount, spread = 8 },
+    }
+
+    local spawned = 0
+    local lastErr = nil
+    for _, cluster in ipairs(clusters) do
+        local clusterSpawned = 0
+        for _ = 1, cluster.count do
+            local ox = cluster.x + ZombRand(-cluster.spread, cluster.spread + 1)
+            local oy = cluster.y + ZombRand(-cluster.spread, cluster.spread + 1)
+            local square = findNearbySpawnableSquare(ox, oy, sz, cluster.spread)
+            if square then
+                local ok, err = spawnZombieAt(square:getX(), square:getY(), square:getZ())
+                if ok then
+                    spawned = spawned + 1
+                    clusterSpawned = clusterSpawned + 1
+                else
+                    lastErr = err
+                end
+            end
+        end
+        sendDebug(player, "DHE: cataclysm cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(sz))
+    end
+
+    if spawned <= 0 then
+        sendDebug(player, "DHE: cataclysm found base square but spawned 0 zombies. base=" .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz))
+        if lastErr then sendDebug(player, "DHE: cataclysm spawn API failed: " .. tostring(lastErr)) end
+        return false
+    end
+
+    attractCataclysmToPlayer(player)
+    triggerCataclysmWeather(player)
+    notifyPlayer(
+        player,
+        sx,
+        sy,
+        sz,
+        spawned,
+        "cataclysm",
+        DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds"),
+        DynamicHordeEvents.GetNumber("CataclysmScreenEffectSeconds")
+    )
+
+    lastCataclysmDay = getWorldDaysSurvived()
+    scheduleNextCataclysm(player)
+
+    sendDebug(player, "DHE: CATACLYSM spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz))
+    if spawned == 0 and lastErr then
+        sendDebug(player, "DHE: cataclysm spawn API failed: " .. tostring(lastErr))
+    end
+
+    return spawned > 0
+end
+
 function DynamicHordeEvents.Server.Update()
     if not DynamicHordeEvents.GetBool("Enabled") then return end
 
     if nextSpawnHour == nil then
         scheduleNextSpawn(nil)
-        return
+    end
+    if nextCataclysmDay == nil and DynamicHordeEvents.GetBool("EnableCataclysmHorde") then
+        scheduleNextCataclysm(nil)
     end
 
     local currentHour = getGameTime():getWorldAgeHours()
+    local currentDay = getWorldDaysSurvived()
+
+    if DynamicHordeEvents.GetBool("EnableCataclysmHorde") and nextCataclysmDay ~= nil and currentDay >= nextCataclysmDay then
+        local cPlayer = pickTargetPlayer()
+        if cPlayer then
+            spawnCataclysmHorde(cPlayer)
+        end
+    end
+
     if currentHour < nextSpawnHour then return end
 
     local cooldown = DynamicHordeEvents.GetNumber("CooldownHours")
@@ -345,14 +588,17 @@ function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args
     elseif command == "ForceSpawn" then
         sendDebug(player, "DHE: forced NORMAL spawn requested.")
         spawnHorde(player, false, nil)
+    elseif command == "ForceCataclysm" then
+        sendDebug(player, "DHE: forced CATACLYSM spawn requested.")
+        spawnCataclysmHorde(player)
     elseif command == "Status" then
         local currentHour = getGameTime():getWorldAgeHours()
         local multiplier, steps, daysSurvived = getHordeScalingMultiplier()
-        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0))
+        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay))
     end
 end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
-Events.OnGameStart.Add(function() scheduleNextSpawn(nil) end)
+Events.OnGameStart.Add(function() scheduleNextSpawn(nil); if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end end)
 Events.EveryTenMinutes.Add(DynamicHordeEvents.Server.Update)
 Events.EveryHours.Add(DynamicHordeEvents.Server.Update)

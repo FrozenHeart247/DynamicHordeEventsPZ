@@ -27,6 +27,14 @@ local function addDebugContext(playerIndex, context, worldObjects, test)
         DynamicHordeEvents.Client.Request("ForceSpawn")
     end)
 
+    context:addOption("DHE: Test cataclysm UI + sound only", nil, function()
+        DynamicHordeEvents.Client.TestCataclysmIndicatorAndSound()
+    end)
+
+    context:addOption("DHE: Force cataclysm horde event", nil, function()
+        DynamicHordeEvents.Client.Request("ForceCataclysm")
+    end)
+
     context:addOption("DHE: Clear indicator", nil, function()
         DynamicHordeEvents.Client.ClearTarget()
     end)

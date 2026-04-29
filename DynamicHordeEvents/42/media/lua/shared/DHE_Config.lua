@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.5.1-postui-no-banner-hud"
+DynamicHordeEvents.Version = "0.6.1-cataclysm-spawn-fix"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -36,6 +36,21 @@ DynamicHordeEvents.Defaults = {
     EnableDebugHotkey = false,
     TestSpawnRadius = 25,
     TestZombieCount = 10,
+
+    -- Rare ultra-hardcore event layer. Separate from normal horde scaling.
+    EnableCataclysmHorde = true,
+    CataclysmMinDays = 90,
+    CataclysmMaxDays = 120,
+    CataclysmMinZombies = 150,
+    CataclysmMaxZombies = 300,
+    CataclysmMinSpawnRadius = 140,
+    CataclysmMaxSpawnRadius = 240,
+    CataclysmIndicatorSeconds = 45,
+    CataclysmAttractionRadius = 800,
+    CataclysmAttractionVolume = 800,
+    EnableCataclysmWeather = true,
+    EnableCataclysmScreenEffect = true,
+    CataclysmScreenEffectSeconds = 15,
 }
 
 local function readSandboxValue(key)

@@ -7,6 +7,7 @@ local DHE_UI = {
     ring = nil,
     blip = nil,
     alert = nil,
+    redOverlay = nil,
     textureStatusLogged = false,
     lastHeartbeatAt = 0,
     lastRenderErrorAt = 0,
@@ -48,6 +49,7 @@ local function loadTextures()
     DHE_UI.ring = getTexture("media/ui/dhe_ring.png")
     DHE_UI.blip = getTexture("media/ui/dhe_blip.png")
     DHE_UI.alert = getTexture("media/ui/dhe_alert.png")
+    DHE_UI.redOverlay = getTexture("media/ui/dhe_red_overlay.png")
 
     if not DHE_UI.textureStatusLogged then
         DHE_UI.textureStatusLogged = true
@@ -81,6 +83,37 @@ local function renderLastMessage()
     end
 end
 
+local function renderCataclysmScreenEffect(target, now)
+    if not target or target.eventType ~= "cataclysm" then return end
+    if not DynamicHordeEvents.GetBool("EnableCataclysmScreenEffect") then return end
+    if not UIManager or not UIManager.DrawTexture then return end
+
+    local effectSeconds = tonumber(target.screenEffectSeconds) or DynamicHordeEvents.GetNumber("CataclysmScreenEffectSeconds")
+    if effectSeconds <= 0 then return end
+
+    local elapsed = (now - (target.createdAtMs or now)) / 1000.0
+    if elapsed > effectSeconds then return end
+
+    local fade = 1.0
+    if elapsed < 2.0 then fade = elapsed / 2.0 end
+    if effectSeconds - elapsed < 3.0 then fade = math.min(fade, math.max(0, (effectSeconds - elapsed) / 3.0)) end
+
+    local pulse = 0.55 + 0.45 * math.abs(math.sin(now / 180.0))
+    local alpha = 0.10 * fade * pulse
+    local overlay = DHE_UI.redOverlay
+    if not overlay then
+        pcall(function() overlay = getTexture("media/ui/dhe_red_overlay.png") end)
+        DHE_UI.redOverlay = overlay
+    end
+    if not overlay then return end
+
+    local w = getCore():getScreenWidth()
+    local h = getCore():getScreenHeight()
+    pcall(function()
+        UIManager.DrawTexture(overlay, 0, 0, w, h, alpha)
+    end)
+end
+
 local function drawTextureWidget(target, centerX, centerY, angleRad, label, distance, secondsLeft, alpha)
     if not loadTextures() then return false end
     if not UIManager or not UIManager.DrawTexture then return false end
@@ -111,8 +144,10 @@ local function drawTextureWidget(target, centerX, centerY, angleRad, label, dist
 end
 
 local function renderFallbackBox(target, centerX, centerY, label, distance, secondsLeft, alpha)
-    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 34, "HORDE", 1, 0.15, 0.15, alpha)
-    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 12, "[" .. label .. "]", 1, 0.35, 0.35, alpha)
+    local title = "HORDE"
+    if target and target.eventType == "cataclysm" then title = "CATACLYSM" end
+    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 34, title, 1, 0.05, 0.05, alpha)
+    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 12, "[" .. label .. "]", 1, 0.25, 0.25, alpha)
     drawShadowTextCentre(UIFont.Small, centerX, centerY + 12, string.format("%.0f tiles", distance), 1, 1, 1, alpha)
     drawShadowTextCentre(UIFont.Small, centerX, centerY + 30, string.format("count:%d  %ds", target.count or 0, math.max(0, math.floor(secondsLeft))), 1, 1, 1, alpha)
 end
@@ -125,7 +160,9 @@ local function renderIndicatorRaw()
 
     local target = DynamicHordeEvents.Client.Target
     local now = getTimestampMs()
-    local lifeMs = math.max(5000, DynamicHordeEvents.GetNumber("IndicatorSeconds") * 1000)
+    local indicatorSeconds = DynamicHordeEvents.GetNumber("IndicatorSeconds")
+    if target.eventType == "cataclysm" then indicatorSeconds = DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds") end
+    local lifeMs = math.max(5000, indicatorSeconds * 1000)
     target.expiresAtMs = target.expiresAtMs or ((target.createdAtMs or now) + lifeMs)
 
     if now >= target.expiresAtMs then
@@ -150,6 +187,8 @@ local function renderIndicatorRaw()
     local pulse = 0.86 + 0.14 * math.abs(math.sin(now / 220.0))
     local alpha = fade * pulse
 
+    renderCataclysmScreenEffect(target, now)
+
     local screenW = getCore():getScreenWidth()
     local centerX = screenW - 135
     local centerY = 120
@@ -164,8 +203,14 @@ local function renderIndicatorRaw()
         renderFallbackBox(target, centerX, centerY, label, distance, secondsLeft, alpha)
     else
         -- Keep text visible even while texture assets are warming up on the first event.
-        drawShadowTextCentre(UIFont.Medium, centerX, centerY + 92, "HORDE INCOMING", 1, 0.2, 0.2, alpha)
-        drawShadowTextCentre(UIFont.Small, centerX, centerY + 112, string.format("%s | %.0f tiles | %d", label, distance, target.count or 0), 1, 1, 1, alpha)
+        local title = "HORDE INCOMING"
+        local detail = string.format("%s | %.0f tiles | %d", label, distance, target.count or 0)
+        if target.eventType == "cataclysm" then
+            title = "CATACLYSM HORDE"
+            detail = string.format("%s | %.0f tiles | ~%d", label, distance, target.count or 0)
+        end
+        drawShadowTextCentre(UIFont.Medium, centerX, centerY + 92, title, 1, 0.1, 0.1, alpha)
+        drawShadowTextCentre(UIFont.Small, centerX, centerY + 112, detail, 1, 1, 1, alpha)
     end
 end
 
