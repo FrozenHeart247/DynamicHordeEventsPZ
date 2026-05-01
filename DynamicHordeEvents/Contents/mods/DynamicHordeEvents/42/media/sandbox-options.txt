@@ -410,6 +410,133 @@ option DynamicHordeEvents.EnableCataclysmHordeSpeech
     translation = DynamicHordeEvents_EnableCataclysmHordeSpeech,
 }
 
+
+option DynamicHordeEvents.EnableWanderingHorde
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableWanderingHorde,
+}
+
+option DynamicHordeEvents.WanderingMinHours
+{
+    type = integer,
+    min = 1,
+    max = 720,
+    default = 72,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMinHours,
+}
+
+option DynamicHordeEvents.WanderingMaxHours
+{
+    type = integer,
+    min = 1,
+    max = 720,
+    default = 168,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMaxHours,
+}
+
+option DynamicHordeEvents.WanderingMinZombies
+{
+    type = integer,
+    min = 1,
+    max = 1000,
+    default = 40,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMinZombies,
+}
+
+option DynamicHordeEvents.WanderingMaxZombies
+{
+    type = integer,
+    min = 1,
+    max = 1000,
+    default = 120,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMaxZombies,
+}
+
+option DynamicHordeEvents.WanderingMinSpawnRadius
+{
+    type = integer,
+    min = 10,
+    max = 500,
+    default = 140,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMinSpawnRadius,
+}
+
+option DynamicHordeEvents.WanderingMaxSpawnRadius
+{
+    type = integer,
+    min = 10,
+    max = 500,
+    default = 220,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingMaxSpawnRadius,
+}
+
+option DynamicHordeEvents.WanderingExitDistance
+{
+    type = integer,
+    min = 50,
+    max = 800,
+    default = 300,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingExitDistance,
+}
+
+option DynamicHordeEvents.WanderingSpread
+{
+    type = integer,
+    min = 4,
+    max = 120,
+    default = 36,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingSpread,
+}
+
+option DynamicHordeEvents.WanderingIndicatorSeconds
+{
+    type = integer,
+    min = 5,
+    max = 600,
+    default = 35,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingIndicatorSeconds,
+}
+
+option DynamicHordeEvents.WanderingAttractionRadius
+{
+    type = integer,
+    min = 10,
+    max = 2000,
+    default = 900,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingAttractionRadius,
+}
+
+option DynamicHordeEvents.WanderingAttractionVolume
+{
+    type = integer,
+    min = 10,
+    max = 2000,
+    default = 900,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_WanderingAttractionVolume,
+}
+
+option DynamicHordeEvents.EnableWanderingHordeSpeech
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableWanderingHordeSpeech,
+}
+
 option DynamicHordeEvents.Debug
 {
     type = boolean,

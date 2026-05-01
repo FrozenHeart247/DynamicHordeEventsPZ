@@ -36,6 +36,13 @@ local CATACLYSM_HORDE_LINES = {
     "Fuuuuuuck! Why can't you sit in one place?'. I'll need a good bottle of whiskey after that... If I survive",
 }
 
+local WANDERING_HORDE_LINES = {
+    "Hold on... that's a moving horde. Maybe I can stay quiet.",
+    "Shit. They're passing through. Don't make a sound.",
+    "That's a lot of dead on the move. Better let them pass.",
+    "Keep it quiet... maybe they won't notice me.",
+}
+
 local function randomLine(lines)
     if not lines or #lines == 0 then return nil end
     local index = ZombRand(1, #lines + 1)
@@ -47,9 +54,13 @@ function DynamicHordeEvents.Client.SayHordeLine(eventType)
     if not player then return end
 
     local line = nil
-    if tostring(eventType or "normal") == "cataclysm" then
+    local kind = tostring(eventType or "normal")
+    if kind == "cataclysm" then
         if not DynamicHordeEvents.GetBool("EnableCataclysmHordeSpeech") then return end
         line = randomLine(CATACLYSM_HORDE_LINES)
+    elseif kind == "wandering" then
+        if not DynamicHordeEvents.GetBool("EnableWanderingHordeSpeech") then return end
+        line = randomLine(WANDERING_HORDE_LINES)
     else
         if not DynamicHordeEvents.GetBool("EnableNormalHordeSpeech") then return end
         line = randomLine(NORMAL_HORDE_LINES)
@@ -129,13 +140,16 @@ local function playOneSound(soundName)
     return false
 end
 
-function DynamicHordeEvents.Client.PlayWarningSound()
+function DynamicHordeEvents.Client.PlayWarningSound(eventType)
     if not DynamicHordeEvents.GetBool("EnableWarningSound") then
         DynamicHordeEvents.Client.ShowMessage("DHE: warning sound disabled in sandbox")
         return false
     end
 
     local preferred = tostring(DynamicHordeEvents.Get("WarningSound") or "DynamicHordeWarning")
+    if tostring(eventType or "normal") == "wandering" then
+        preferred = tostring(DynamicHordeEvents.Get("WanderingWarningSound") or "DynamicHordeWanderingWarning")
+    end
     if playOneSound(preferred) then
         DynamicHordeEvents.Client.ShowMessage("DHE: sound test ok: " .. preferred)
         return true
@@ -165,6 +179,8 @@ function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
     local indicatorSeconds = DynamicHordeEvents.GetNumber("IndicatorSeconds")
     if args.eventType == "cataclysm" then
         indicatorSeconds = DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds")
+    elseif args.eventType == "wandering" then
+        indicatorSeconds = DynamicHordeEvents.GetNumber("WanderingIndicatorSeconds")
     end
     local lifeMs = math.max(5000, indicatorSeconds * 1000)
     DynamicHordeEvents.Client.Target = {
@@ -179,7 +195,7 @@ function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
         screenEffectSeconds = tonumber(args.screenEffectSeconds) or 0,
     }
     if not args.debugOnly then DynamicHordeEvents.Client.QueueHordeLine(DynamicHordeEvents.Client.Target.eventType) end
-    if not silent then DynamicHordeEvents.Client.PlayWarningSound() end
+    if not silent then DynamicHordeEvents.Client.PlayWarningSound(DynamicHordeEvents.Client.Target.eventType) end
     DynamicHordeEvents.Client.ShowMessage("DHE: target set, count=" .. tostring(DynamicHordeEvents.Client.Target.count))
 end
 
@@ -229,8 +245,33 @@ end
 
 function DynamicHordeEvents.Client.TestCataclysmIndicatorAndSound()
     DynamicHordeEvents.Client.TestCataclysmUIOnly()
-    DynamicHordeEvents.Client.PlayWarningSound()
+    DynamicHordeEvents.Client.PlayWarningSound("cataclysm")
     DynamicHordeEvents.Client.ShowMessage("DHE: cataclysm UI + sound local test fired")
+end
+
+function DynamicHordeEvents.Client.TestWanderingUIOnly()
+    local player = getPlayer()
+    if not player then
+        DynamicHordeEvents.Client.ShowMessage("DHE: no player for wandering UI test")
+        return
+    end
+    DynamicHordeEvents.Client.SetIncomingTarget({
+        x = player:getX() + 90,
+        y = player:getY() + 10,
+        z = player:getZ(),
+        count = 80,
+        debugOnly = true,
+        eventType = "wandering",
+        routeTargetX = player:getX() - 120,
+        routeTargetY = player:getY() - 10,
+    }, true)
+    DynamicHordeEvents.Client.ShowMessage("DHE: wandering UI-only test target created")
+end
+
+function DynamicHordeEvents.Client.TestWanderingIndicatorAndSound()
+    DynamicHordeEvents.Client.TestWanderingUIOnly()
+    DynamicHordeEvents.Client.PlayWarningSound("wandering")
+    DynamicHordeEvents.Client.ShowMessage("DHE: wandering UI + sound local test fired")
 end
 
 function DynamicHordeEvents.Client.ClearTarget()

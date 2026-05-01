@@ -35,6 +35,14 @@ local function addDebugContext(playerIndex, context, worldObjects, test)
         DynamicHordeEvents.Client.Request("ForceCataclysm")
     end)
 
+    context:addOption("DHE: Test wandering UI + sound only", nil, function()
+        DynamicHordeEvents.Client.TestWanderingIndicatorAndSound()
+    end)
+
+    context:addOption("DHE: Force wandering horde event", nil, function()
+        DynamicHordeEvents.Client.Request("ForceWandering")
+    end)
+
     context:addOption("DHE: Clear indicator", nil, function()
         DynamicHordeEvents.Client.ClearTarget()
     end)

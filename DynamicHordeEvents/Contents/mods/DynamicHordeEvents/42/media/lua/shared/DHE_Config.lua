@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.6.5-horde-speech-debug-fix"
+DynamicHordeEvents.Version = "0.7.0-wandering-horde"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -58,9 +58,25 @@ DynamicHordeEvents.Defaults = {
     EnableCataclysmScreenEffect = true,
     CataclysmScreenEffectSeconds = 15,
 
+    -- Wandering horde: passes through/near the player area instead of directly targeting the player.
+    EnableWanderingHorde = true,
+    WanderingMinHours = 72,
+    WanderingMaxHours = 168,
+    WanderingMinZombies = 40,
+    WanderingMaxZombies = 120,
+    WanderingMinSpawnRadius = 140,
+    WanderingMaxSpawnRadius = 220,
+    WanderingExitDistance = 300,
+    WanderingSpread = 36,
+    WanderingIndicatorSeconds = 35,
+    WanderingAttractionRadius = 900,
+    WanderingAttractionVolume = 900,
+    WanderingWarningSound = "DynamicHordeWanderingWarning",
+
     -- Short survivor voice lines shown above the player when a real event starts.
     EnableNormalHordeSpeech = true,
     EnableCataclysmHordeSpeech = true,
+    EnableWanderingHordeSpeech = true,
 }
 
 local function readSandboxValue(key)

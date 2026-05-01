@@ -144,9 +144,16 @@ end
 
 local function renderFallbackBox(target, centerX, centerY, label, distance, secondsLeft, alpha)
     local title = "HORDE"
-    if target and target.eventType == "cataclysm" then title = "CATACLYSM" end
-    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 34, title, 1, 0.05, 0.05, alpha)
-    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 12, "[" .. label .. "]", 1, 0.25, 0.25, alpha)
+    local tr, tg, tb = 1, 0.05, 0.05
+    if target and target.eventType == "cataclysm" then
+        title = "CATACLYSM"
+        tr, tg, tb = 1, 0.02, 0.02
+    elseif target and target.eventType == "wandering" then
+        title = "WANDERING"
+        tr, tg, tb = 1, 0.55, 0.10
+    end
+    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 34, title, tr, tg, tb, alpha)
+    drawShadowTextCentre(UIFont.Medium, centerX, centerY - 12, "[" .. label .. "]", tr, math.max(tg, 0.25), math.max(tb, 0.15), alpha)
     drawShadowTextCentre(UIFont.Small, centerX, centerY + 12, string.format("%.0f tiles", distance), 1, 1, 1, alpha)
     drawShadowTextCentre(UIFont.Small, centerX, centerY + 30, string.format("count:%d  %ds", target.count or 0, math.max(0, math.floor(secondsLeft))), 1, 1, 1, alpha)
 end
@@ -207,8 +214,13 @@ local function renderIndicatorRaw()
         if target.eventType == "cataclysm" then
             title = "CATACLYSM HORDE"
             detail = string.format("%s | %.0f tiles | ~%d", label, distance, target.count or 0)
+        elseif target.eventType == "wandering" then
+            title = "WANDERING HORDE"
+            detail = string.format("passing %s | %.0f tiles | ~%d", label, distance, target.count or 0)
         end
-        drawShadowTextCentre(UIFont.Medium, centerX, centerY + 92, title, 1, 0.1, 0.1, alpha)
+        local tr, tg, tb = 1, 0.1, 0.1
+        if target.eventType == "wandering" then tr, tg, tb = 1, 0.55, 0.10 end
+        drawShadowTextCentre(UIFont.Medium, centerX, centerY + 92, title, tr, tg, tb, alpha)
         drawShadowTextCentre(UIFont.Small, centerX, centerY + 112, detail, 1, 1, 1, alpha)
     end
 end

@@ -9,6 +9,8 @@ local nextSpawnHour = nil
 local lastSpawnHour = -999999
 local nextCataclysmDay = nil
 local lastCataclysmDay = -999999
+local nextWanderingHour = nil
+local lastWanderingHour = -999999
 local cataclysmWeatherAdminResetHour = nil
 
 local function clampRange(minValue, maxValue)
@@ -99,6 +101,15 @@ local function scheduleNextCataclysm(playerForDebug)
 
     nextCataclysmDay = getWorldDaysSurvived() + delay
     sendDebug(playerForDebug, "DHE: next cataclysm horde in " .. tostring(delay) .. " day(s). targetWorldDay=" .. tostring(nextCataclysmDay))
+end
+
+local function scheduleNextWandering(playerForDebug)
+    local minHours = DynamicHordeEvents.GetNumber("WanderingMinHours")
+    local maxHours = DynamicHordeEvents.GetNumber("WanderingMaxHours")
+    local delay = randomBetween(minHours, maxHours)
+
+    nextWanderingHour = getGameTime():getWorldAgeHours() + delay
+    sendDebug(playerForDebug, "DHE: next wandering horde in " .. tostring(delay) .. " hour(s). targetWorldHour=" .. tostring(nextWanderingHour))
 end
 
 local function getPlayerList()
@@ -275,6 +286,35 @@ local function findNearbySpawnableSquare(x, y, z, spread)
     return nil
 end
 
+local function findUsableSquareNearPoint(x, y, z, spread, allowIndoorFallback)
+    spread = math.max(1, math.floor(tonumber(spread) or 1))
+
+    local square = getCell():getGridSquare(math.floor(x), math.floor(y), z)
+    if squareIsUsable(square) then return square end
+
+    for _ = 1, 40 do
+        local ox = math.floor(x + ZombRand(-spread, spread + 1))
+        local oy = math.floor(y + ZombRand(-spread, spread + 1))
+        square = getCell():getGridSquare(ox, oy, z)
+        if squareIsUsable(square) then return square end
+    end
+
+    if allowIndoorFallback then
+        for _ = 1, 20 do
+            local ox = math.floor(x + ZombRand(-spread, spread + 1))
+            local oy = math.floor(y + ZombRand(-spread, spread + 1))
+            square = getCell():getGridSquare(ox, oy, z)
+            if square then
+                local solid = false
+                pcall(function() solid = square:isSolid() end)
+                if not solid then return square end
+            end
+        end
+    end
+
+    return nil
+end
+
 local function attractHordeToPlayer(player)
     local radius = DynamicHordeEvents.GetNumber("AttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("AttractionVolume")
@@ -294,6 +334,19 @@ local function attractCataclysmToPlayer(player)
     end)
     if not ok then
         sendDebug(player, "DHE: cataclysm addSound failed: " .. tostring(err))
+    end
+end
+
+local function attractWanderingToExitPoint(player, targetX, targetY, targetZ)
+    local radius = DynamicHordeEvents.GetNumber("WanderingAttractionRadius")
+    local volume = DynamicHordeEvents.GetNumber("WanderingAttractionVolume")
+    local ok, err = pcall(function()
+        addSound(player, targetX, targetY, targetZ, radius, volume)
+    end)
+    if not ok then
+        sendDebug(player, "DHE: wandering addSound failed: " .. tostring(err))
+    else
+        sendDebug(player, "DHE: wandering attraction point at " .. tostring(math.floor(targetX)) .. "," .. tostring(math.floor(targetY)) .. "," .. tostring(targetZ) .. " radius=" .. tostring(radius))
     end
 end
 
@@ -635,6 +688,119 @@ local function spawnHorde(player, forceNear, forceCount)
     return spawned > 0
 end
 
+local function spawnWanderingHorde(player, forceCount)
+    if not player then return false end
+
+    local playerSquare = player:getSquare()
+    if not playerSquare then return false end
+
+    local px = playerSquare:getX()
+    local py = playerSquare:getY()
+    local pz = playerSquare:getZ()
+
+    local angle = ZombRandFloat(0.0, math.pi * 2.0)
+    local dirX = math.cos(angle)
+    local dirY = math.sin(angle)
+    local perpX = -dirY
+    local perpY = dirX
+
+    local spawnRadius = randomBetween(
+        DynamicHordeEvents.GetNumber("WanderingMinSpawnRadius"),
+        DynamicHordeEvents.GetNumber("WanderingMaxSpawnRadius")
+    )
+    local exitDistance = math.max(spawnRadius + 60, DynamicHordeEvents.GetNumber("WanderingExitDistance"))
+    local spread = math.max(6, DynamicHordeEvents.GetNumber("WanderingSpread"))
+
+    -- Horde starts on one side of the player and gets attracted to a point far beyond the player.
+    -- This simulates a passing/wandering horde rather than a direct assault.
+    local sx = math.floor(px - dirX * spawnRadius)
+    local sy = math.floor(py - dirY * spawnRadius)
+    local tx = math.floor(px + dirX * exitDistance)
+    local ty = math.floor(py + dirY * exitDistance)
+
+    local baseSquare = findUsableSquareNearPoint(sx, sy, pz, spread * 2, true)
+    if not baseSquare then
+        -- Loaded chunks can be awkward. Fall back to normal search, but keep the exit point behavior.
+        baseSquare = findSpawnSquareCustom(
+            player,
+            DynamicHordeEvents.GetNumber("WanderingMinSpawnRadius"),
+            DynamicHordeEvents.GetNumber("WanderingMaxSpawnRadius"),
+            DynamicHordeEvents.GetNumber("SpawnSearchAttempts")
+        )
+    end
+
+    if not baseSquare then
+        sendDebug(player, "DHE: failed to find wandering spawn square.")
+        return false
+    end
+
+    sx = baseSquare:getX()
+    sy = baseSquare:getY()
+    pz = baseSquare:getZ()
+
+    local count = forceCount or randomBetween(
+        DynamicHordeEvents.GetNumber("WanderingMinZombies"),
+        DynamicHordeEvents.GetNumber("WanderingMaxZombies")
+    )
+
+    local mainCount = math.floor(count * 0.55)
+    local leftCount = math.floor(count * 0.20)
+    local rightCount = math.floor(count * 0.20)
+    local rearCount = count - mainCount - leftCount - rightCount
+
+    local clusters = {
+        { x = sx, y = sy, count = mainCount, spread = spread },
+        { x = sx + math.floor(perpX * spread), y = sy + math.floor(perpY * spread), count = leftCount, spread = math.max(6, math.floor(spread * 0.65)) },
+        { x = sx - math.floor(perpX * spread), y = sy - math.floor(perpY * spread), count = rightCount, spread = math.max(6, math.floor(spread * 0.65)) },
+        { x = sx - math.floor(dirX * 18), y = sy - math.floor(dirY * 18), count = rearCount, spread = math.max(6, math.floor(spread * 0.75)) },
+    }
+
+    local spawned = 0
+    local lastErr = nil
+    for _, cluster in ipairs(clusters) do
+        local clusterSpawned = 0
+        for _ = 1, cluster.count do
+            local ox = cluster.x + ZombRand(-cluster.spread, cluster.spread + 1)
+            local oy = cluster.y + ZombRand(-cluster.spread, cluster.spread + 1)
+            local square = findNearbySpawnableSquare(ox, oy, pz, cluster.spread)
+            if square then
+                local ok, err = spawnZombieAt(square:getX(), square:getY(), square:getZ())
+                if ok then
+                    spawned = spawned + 1
+                    clusterSpawned = clusterSpawned + 1
+                else
+                    lastErr = err
+                end
+            end
+        end
+        sendDebug(player, "DHE: wandering cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(pz))
+    end
+
+    if spawned <= 0 then
+        sendDebug(player, "DHE: wandering found base square but spawned 0 zombies. base=" .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(pz))
+        if lastErr then sendDebug(player, "DHE: wandering spawn API failed: " .. tostring(lastErr)) end
+        return false
+    end
+
+    attractWanderingToExitPoint(player, tx, ty, pz)
+    notifyPlayer(
+        player,
+        sx,
+        sy,
+        pz,
+        spawned,
+        "wandering",
+        DynamicHordeEvents.GetNumber("WanderingIndicatorSeconds"),
+        0
+    )
+
+    lastWanderingHour = getGameTime():getWorldAgeHours()
+    scheduleNextWandering(player)
+
+    sendDebug(player, "DHE: WANDERING spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(pz) .. " exit=" .. tostring(tx) .. "," .. tostring(ty))
+    return spawned > 0
+end
+
 local function spawnCataclysmHorde(player)
     if not player then return false end
 
@@ -741,6 +907,9 @@ function DynamicHordeEvents.Server.Update()
     if nextCataclysmDay == nil and DynamicHordeEvents.GetBool("EnableCataclysmHorde") then
         scheduleNextCataclysm(nil)
     end
+    if nextWanderingHour == nil and DynamicHordeEvents.GetBool("EnableWanderingHorde") then
+        scheduleNextWandering(nil)
+    end
 
     local currentHour = getGameTime():getWorldAgeHours()
     local currentDay = getWorldDaysSurvived()
@@ -749,6 +918,13 @@ function DynamicHordeEvents.Server.Update()
         local cPlayer = pickTargetPlayer()
         if cPlayer then
             spawnCataclysmHorde(cPlayer)
+        end
+    end
+
+    if DynamicHordeEvents.GetBool("EnableWanderingHorde") and nextWanderingHour ~= nil and currentHour >= nextWanderingHour then
+        local wPlayer = pickTargetPlayer()
+        if wPlayer then
+            spawnWanderingHorde(wPlayer, nil)
         end
     end
 
@@ -781,14 +957,21 @@ function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args
     elseif command == "ForceCataclysm" then
         sendDebug(player, "DHE: forced CATACLYSM spawn requested.")
         spawnCataclysmHorde(player)
+    elseif command == "ForceWandering" then
+        sendDebug(player, "DHE: forced WANDERING spawn requested.")
+        spawnWanderingHorde(player, nil)
     elseif command == "Status" then
         local currentHour = getGameTime():getWorldAgeHours()
         local multiplier, steps, daysSurvived = getHordeScalingMultiplier()
-        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay))
+        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay) .. ", nextWanderingHour=" .. tostring(nextWanderingHour))
     end
 end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
-Events.OnGameStart.Add(function() scheduleNextSpawn(nil); if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end end)
+Events.OnGameStart.Add(function()
+    scheduleNextSpawn(nil)
+    if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end
+    if DynamicHordeEvents.GetBool("EnableWanderingHorde") then scheduleNextWandering(nil) end
+end)
 Events.EveryTenMinutes.Add(DynamicHordeEvents.Server.Update)
 Events.EveryHours.Add(DynamicHordeEvents.Server.Update)

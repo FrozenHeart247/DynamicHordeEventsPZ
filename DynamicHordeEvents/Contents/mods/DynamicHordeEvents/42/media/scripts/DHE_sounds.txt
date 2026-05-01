@@ -8,4 +8,13 @@ module DynamicHordeEvents
             file = media/sound/horde_warning.ogg,
         }
     }
+
+    sound DynamicHordeWanderingWarning
+    {
+        category = UI,
+        clip
+        {
+            file = media/sound/wandering_horde_warning.ogg,
+        }
+    }
 }
