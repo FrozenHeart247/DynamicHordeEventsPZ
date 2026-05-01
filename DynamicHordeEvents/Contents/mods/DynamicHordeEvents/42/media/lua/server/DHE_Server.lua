@@ -696,7 +696,12 @@ local function spawnWanderingHorde(player, forceCount)
 
     local px = playerSquare:getX()
     local py = playerSquare:getY()
-    local pz = playerSquare:getZ()
+    local playerZ = playerSquare:getZ()
+
+    -- Wandering hordes should be ground-level events. If the player is upstairs,
+    -- using playerZ would try to find outdoor spawn squares on z=1, which often
+    -- means "nothing useful exists here". Keep x/y from the player, but search on z=0.
+    local routeZ = 0
 
     local angle = ZombRandFloat(0.0, math.pi * 2.0)
     local dirX = math.cos(angle)
@@ -718,7 +723,7 @@ local function spawnWanderingHorde(player, forceCount)
     local tx = math.floor(px + dirX * exitDistance)
     local ty = math.floor(py + dirY * exitDistance)
 
-    local baseSquare = findUsableSquareNearPoint(sx, sy, pz, spread * 2, true)
+    local baseSquare = findUsableSquareNearPoint(sx, sy, routeZ, math.max(8, math.floor(spread * 1.2)), true)
     if not baseSquare then
         -- Loaded chunks can be awkward. Fall back to normal search, but keep the exit point behavior.
         baseSquare = findSpawnSquareCustom(
@@ -730,29 +735,38 @@ local function spawnWanderingHorde(player, forceCount)
     end
 
     if not baseSquare then
-        sendDebug(player, "DHE: failed to find wandering spawn square.")
+        sendDebug(player, "DHE: failed to find wandering spawn square. playerZ=" .. tostring(playerZ) .. ", routeZ=" .. tostring(routeZ))
         return false
     end
 
     sx = baseSquare:getX()
     sy = baseSquare:getY()
-    pz = baseSquare:getZ()
+    routeZ = baseSquare:getZ()
 
     local count = forceCount or randomBetween(
         DynamicHordeEvents.GetNumber("WanderingMinZombies"),
         DynamicHordeEvents.GetNumber("WanderingMaxZombies")
     )
 
-    local mainCount = math.floor(count * 0.55)
-    local leftCount = math.floor(count * 0.20)
-    local rightCount = math.floor(count * 0.20)
+    -- Compact formation: keep the route behavior, but avoid the old "wall of zombies" look.
+    -- Important: existing saves can keep old WanderingSpread values, so the code itself
+    -- uses smaller internal spreads/offsets instead of relying only on changed defaults.
+    local mainCount = math.floor(count * 0.74)
+    local leftCount = math.floor(count * 0.08)
+    local rightCount = math.floor(count * 0.08)
     local rearCount = count - mainCount - leftCount - rightCount
 
+    local mainSpread = math.max(4, math.floor(spread * 0.28))
+    local sideOffset = math.max(4, math.floor(spread * 0.25))
+    local sideSpread = math.max(3, math.floor(spread * 0.18))
+    local rearOffset = math.max(6, math.floor(spread * 0.35))
+    local rearSpread = math.max(4, math.floor(spread * 0.22))
+
     local clusters = {
-        { x = sx, y = sy, count = mainCount, spread = spread },
-        { x = sx + math.floor(perpX * spread), y = sy + math.floor(perpY * spread), count = leftCount, spread = math.max(6, math.floor(spread * 0.65)) },
-        { x = sx - math.floor(perpX * spread), y = sy - math.floor(perpY * spread), count = rightCount, spread = math.max(6, math.floor(spread * 0.65)) },
-        { x = sx - math.floor(dirX * 18), y = sy - math.floor(dirY * 18), count = rearCount, spread = math.max(6, math.floor(spread * 0.75)) },
+        { x = sx, y = sy, count = mainCount, spread = mainSpread },
+        { x = sx + math.floor(perpX * sideOffset), y = sy + math.floor(perpY * sideOffset), count = leftCount, spread = sideSpread },
+        { x = sx - math.floor(perpX * sideOffset), y = sy - math.floor(perpY * sideOffset), count = rightCount, spread = sideSpread },
+        { x = sx - math.floor(dirX * rearOffset), y = sy - math.floor(dirY * rearOffset), count = rearCount, spread = rearSpread },
     }
 
     local spawned = 0
@@ -762,7 +776,7 @@ local function spawnWanderingHorde(player, forceCount)
         for _ = 1, cluster.count do
             local ox = cluster.x + ZombRand(-cluster.spread, cluster.spread + 1)
             local oy = cluster.y + ZombRand(-cluster.spread, cluster.spread + 1)
-            local square = findNearbySpawnableSquare(ox, oy, pz, cluster.spread)
+            local square = findNearbySpawnableSquare(ox, oy, routeZ, cluster.spread)
             if square then
                 local ok, err = spawnZombieAt(square:getX(), square:getY(), square:getZ())
                 if ok then
@@ -773,21 +787,21 @@ local function spawnWanderingHorde(player, forceCount)
                 end
             end
         end
-        sendDebug(player, "DHE: wandering cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(pz))
+        sendDebug(player, "DHE: wandering cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(routeZ) .. " spread=" .. tostring(cluster.spread))
     end
 
     if spawned <= 0 then
-        sendDebug(player, "DHE: wandering found base square but spawned 0 zombies. base=" .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(pz))
+        sendDebug(player, "DHE: wandering found base square but spawned 0 zombies. base=" .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(routeZ) .. ", playerZ=" .. tostring(playerZ))
         if lastErr then sendDebug(player, "DHE: wandering spawn API failed: " .. tostring(lastErr)) end
         return false
     end
 
-    attractWanderingToExitPoint(player, tx, ty, pz)
+    attractWanderingToExitPoint(player, tx, ty, routeZ)
     notifyPlayer(
         player,
         sx,
         sy,
-        pz,
+        routeZ,
         spawned,
         "wandering",
         DynamicHordeEvents.GetNumber("WanderingIndicatorSeconds"),
@@ -797,7 +811,7 @@ local function spawnWanderingHorde(player, forceCount)
     lastWanderingHour = getGameTime():getWorldAgeHours()
     scheduleNextWandering(player)
 
-    sendDebug(player, "DHE: WANDERING spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(pz) .. " exit=" .. tostring(tx) .. "," .. tostring(ty))
+    sendDebug(player, "DHE: WANDERING spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(routeZ) .. " exit=" .. tostring(tx) .. "," .. tostring(ty) .. " playerZ=" .. tostring(playerZ) .. " configuredSpread=" .. tostring(spread))
     return spawned > 0
 end
 

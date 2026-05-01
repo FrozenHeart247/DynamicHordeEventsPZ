@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.7.0-wandering-horde"
+DynamicHordeEvents.Version = "0.8.1-wandering-ground-compact"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -67,7 +67,7 @@ DynamicHordeEvents.Defaults = {
     WanderingMinSpawnRadius = 140,
     WanderingMaxSpawnRadius = 220,
     WanderingExitDistance = 300,
-    WanderingSpread = 36,
+    WanderingSpread = 18,
     WanderingIndicatorSeconds = 35,
     WanderingAttractionRadius = 900,
     WanderingAttractionVolume = 900,
