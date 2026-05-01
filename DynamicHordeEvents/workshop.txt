@@ -3,4 +3,4 @@ id=3716405632
 title=Dynami Horde Events B42
 description=description Later
 tags=Build 42;Balance;Hardmode;Misc
-visibility=unlisted
+visibility=public

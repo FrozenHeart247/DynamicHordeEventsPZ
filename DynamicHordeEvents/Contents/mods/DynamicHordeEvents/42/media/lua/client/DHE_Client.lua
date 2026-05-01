@@ -41,6 +41,8 @@ local WANDERING_HORDE_LINES = {
     "Shit. They're passing through. Don't make a sound.",
     "That's a lot of dead on the move. Better let them pass.",
     "Keep it quiet... maybe they won't notice me.",
+    "Hey! That's my neighborhood... Hope they wont stay long here. Better not provoke them.",
+    "Is there a parade or what? Dont feel like joining. Better stay quite.",
 }
 
 local function randomLine(lines)
