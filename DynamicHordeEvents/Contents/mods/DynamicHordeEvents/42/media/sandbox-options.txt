@@ -192,6 +192,16 @@ option DynamicHordeEvents.AttractionVolume
     translation = DynamicHordeEvents_AttractionVolume,
 }
 
+option DynamicHordeEvents.MPAttractionDelaySeconds
+{
+    type = integer,
+    min = 1,
+    max = 30,
+    default = 7,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_MPAttractionDelaySeconds,
+}
+
 option DynamicHordeEvents.AvoidIndoorSpawn
 {
     type = boolean,

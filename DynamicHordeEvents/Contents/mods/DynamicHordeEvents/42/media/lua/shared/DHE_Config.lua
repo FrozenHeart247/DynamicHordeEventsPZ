@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.8.1-wandering-ground-compact"
+DynamicHordeEvents.Version = "0.8.9-mp-delay-default"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -29,6 +29,7 @@ DynamicHordeEvents.Defaults = {
     FallbackWarningSound = "ZombieSurprisedPlayer",
     AttractionRadius = 500,
     AttractionVolume = 500,
+    MPAttractionDelaySeconds = 7,
     AvoidIndoorSpawn = true,
     SpawnSearchAttempts = 64,
     Debug = false,

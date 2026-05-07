@@ -315,39 +315,140 @@ local function findUsableSquareNearPoint(x, y, z, spread, allowIndoorFallback)
     return nil
 end
 
+local function serverRuntimeActive()
+    local active = false
+    pcall(function()
+        active = isServer and isServer() == true
+    end)
+    return active
+end
+
+local function emitAttractionSound(player, x, y, z, radius, volume, label, quiet)
+    x = math.floor(tonumber(x) or 0)
+    y = math.floor(tonumber(y) or 0)
+    z = math.floor(tonumber(z) or 0)
+    radius = math.max(1, math.floor(tonumber(radius) or 1))
+    volume = math.max(1, math.floor(tonumber(volume) or 1))
+
+    local source = player
+    local okAny = false
+    local failures = {}
+    local worldSound = nil
+
+    local function try(mode, fn)
+        local ok, result = pcall(fn)
+        if ok then
+            okAny = true
+            return result
+        end
+        table.insert(failures, tostring(mode) .. "=" .. tostring(result))
+        return nil
+    end
+
+    if WorldSoundManager and WorldSoundManager.instance and WorldSoundManager.instance.addSound then
+        worldSound = try("WorldSoundManager:addSound", function()
+            return WorldSoundManager.instance:addSound(source, x, y, z, radius, volume, false, 0.0, 1.0, false, true, false)
+        end) or worldSound
+    end
+
+    if not okAny then
+        worldSound = try("addSound", function()
+            return addSound(source, x, y, z, radius, volume)
+        end) or worldSound
+    end
+
+    if worldSound and ZombiePopulationManager and ZombiePopulationManager.instance and ZombiePopulationManager.instance.addWorldSound then
+        try("ZombiePopulationManager:addWorldSound", function()
+            ZombiePopulationManager.instance:addWorldSound(worldSound, true)
+        end)
+    end
+
+    local square = nil
+    pcall(function() square = getCell():getGridSquare(x, y, z) end)
+    if not okAny and square and AddNoiseToken then
+        try("AddNoiseToken", function()
+            AddNoiseToken(square, radius)
+        end)
+    end
+
+    if not okAny and player and label ~= "wandering" and AddWorldSound then
+        try("AddWorldSound", function()
+            AddWorldSound(player, radius, volume)
+        end)
+    end
+
+    if okAny then
+        if not quiet then
+            sendDebug(player, "DHE: " .. tostring(label or "horde") .. " attraction emitted at " .. tostring(x) .. "," .. tostring(y) .. "," .. tostring(z) .. " radius=" .. tostring(radius) .. " volume=" .. tostring(volume))
+        end
+    elseif not quiet then
+        sendDebug(player, "DHE: " .. tostring(label or "horde") .. " attraction failed: " .. table.concat(failures, "; "))
+    end
+
+    return okAny
+end
+
+local pendingAttractionSounds = {}
+local ATTRACTION_SOUND_DELAY_TICKS_SP = 8
+
+local function getAttractionSoundDelay()
+    if serverRuntimeActive() then
+        local seconds = math.max(1, DynamicHordeEvents.GetNumber("MPAttractionDelaySeconds"))
+        return math.max(1, math.floor((seconds * 10) + 0.5)), seconds
+    end
+    return ATTRACTION_SOUND_DELAY_TICKS_SP, 0.8
+end
+
+local function queueAttractionSound(player, x, y, z, radius, volume, label, quiet)
+    local delayTicks, delaySeconds = getAttractionSoundDelay()
+    table.insert(pendingAttractionSounds, {
+        player = player,
+        x = x,
+        y = y,
+        z = z,
+        radius = radius,
+        volume = volume,
+        label = label,
+        quiet = quiet,
+        ticks = delayTicks,
+    })
+    if not quiet then
+        sendDebug(player, "DHE: " .. tostring(label or "horde") .. " attraction queued in " .. tostring(delaySeconds) .. " sec (" .. tostring(delayTicks) .. " tick(s))")
+    end
+end
+
+local function updateAttractionSounds()
+    if #pendingAttractionSounds == 0 then return end
+
+    local i = 1
+    while i <= #pendingAttractionSounds do
+        local sound = pendingAttractionSounds[i]
+        sound.ticks = (sound.ticks or 0) - 1
+        if sound.ticks <= 0 then
+            emitAttractionSound(sound.player, sound.x, sound.y, sound.z, sound.radius, sound.volume, sound.label, sound.quiet)
+            table.remove(pendingAttractionSounds, i)
+        else
+            i = i + 1
+        end
+    end
+end
+
 local function attractHordeToPlayer(player)
     local radius = DynamicHordeEvents.GetNumber("AttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("AttractionVolume")
-    local ok, err = pcall(function()
-        addSound(player, player:getX(), player:getY(), player:getZ(), radius, volume)
-    end)
-    if not ok then
-        sendDebug(player, "DHE: addSound failed: " .. tostring(err))
-    end
+    queueAttractionSound(player, player:getX(), player:getY(), player:getZ(), radius, volume, "normal", false)
 end
 
 local function attractCataclysmToPlayer(player)
     local radius = DynamicHordeEvents.GetNumber("CataclysmAttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("CataclysmAttractionVolume")
-    local ok, err = pcall(function()
-        addSound(player, player:getX(), player:getY(), player:getZ(), radius, volume)
-    end)
-    if not ok then
-        sendDebug(player, "DHE: cataclysm addSound failed: " .. tostring(err))
-    end
+    queueAttractionSound(player, player:getX(), player:getY(), player:getZ(), radius, volume, "cataclysm", false)
 end
 
 local function attractWanderingToExitPoint(player, targetX, targetY, targetZ)
     local radius = DynamicHordeEvents.GetNumber("WanderingAttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("WanderingAttractionVolume")
-    local ok, err = pcall(function()
-        addSound(player, targetX, targetY, targetZ, radius, volume)
-    end)
-    if not ok then
-        sendDebug(player, "DHE: wandering addSound failed: " .. tostring(err))
-    else
-        sendDebug(player, "DHE: wandering attraction point at " .. tostring(math.floor(targetX)) .. "," .. tostring(math.floor(targetY)) .. "," .. tostring(targetZ) .. " radius=" .. tostring(radius))
-    end
+    queueAttractionSound(player, targetX, targetY, targetZ, radius, volume, "wandering", false)
 end
 
 local function getClimateFloatConstant(cm, name, fallback)
@@ -559,27 +660,163 @@ local function triggerCataclysmWeather(player)
     sendDebug(player, "DHE: cataclysm severe weather trigger attempted, durationHours=" .. tostring(duration))
 end
 
+local globalCreateHordeInAreaTo = createHordeInAreaTo
+local globalSpawnHorde = spawnHorde
+
+local function spawnedZombieCount(result)
+    if result == nil then return 0 end
+
+    local okZombie, isZombie = pcall(function()
+        return result:isZombie()
+    end)
+    if okZombie and isZombie then return 1 end
+
+    local okSize, size = pcall(function()
+        return result:size()
+    end)
+    if okSize and tonumber(size) and tonumber(size) > 0 then
+        return tonumber(size)
+    end
+
+    return 0
+end
+
 local function spawnZombieAt(x, y, z)
     local success = false
     local lastErr = nil
+    local spawnMode = nil
 
     local variants = {
-        function() addZombiesInOutfit(x, y, z, 1, nil, nil) end,
-        function() addZombiesInOutfit(x, y, z, 1, nil, 0) end,
-        function() addZombie(x, y, z, nil, 0, IsoDirections.S) end,
+        {
+            mode = "vzm-now",
+            fn = function()
+                if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombieNow) then
+                    return nil
+                end
+                return VirtualZombieManager.instance:createRealZombieNow(x + 0.5, y + 0.5, z)
+            end,
+        },
+        {
+            mode = "vzm-real",
+            fn = function()
+                if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombie) then
+                    return nil
+                end
+                return VirtualZombieManager.instance:createRealZombie(x + 0.5, y + 0.5, z)
+            end,
+        },
+        {
+            mode = "createZombie",
+            fn = function()
+                if type(createZombie) ~= "function" then return nil end
+                return createZombie(x, y, z, nil, 0, IsoDirections.S)
+            end,
+        },
+        {
+            mode = "outfit",
+            fn = function() return addZombiesInOutfit(x, y, z, 1, nil, nil) end,
+        },
+        {
+            mode = "outfit-dir",
+            fn = function() return addZombiesInOutfit(x, y, z, 1, nil, 0) end,
+        },
     }
 
-    for _, fn in ipairs(variants) do
-        local ok, err = pcall(fn)
-        if ok then
+    for _, variant in ipairs(variants) do
+        local ok, result = pcall(variant.fn)
+        if ok and spawnedZombieCount(result) > 0 then
             success = true
+            spawnMode = variant.mode
             break
         else
-            lastErr = err
+            lastErr = ok and (tostring(variant.mode) .. " returned no zombie") or result
         end
     end
 
-    return success, lastErr
+    return success, lastErr, spawnMode
+end
+
+local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
+    local spawned = 0
+    local lastErr = nil
+    local firstMode = nil
+
+    for _ = 1, count do
+        local ox = math.floor(centerX + ZombRand(-spread, spread + 1))
+        local oy = math.floor(centerY + ZombRand(-spread, spread + 1))
+        local square = findNearbySpawnableSquare(ox, oy, z, spread)
+        if square then
+            local ok, err, mode = spawnZombieAt(square:getX(), square:getY(), square:getZ())
+            if ok then
+                spawned = spawned + 1
+                firstMode = firstMode or mode
+            else
+                lastErr = err
+            end
+        end
+    end
+
+    return spawned, lastErr, firstMode
+end
+
+local function spawnZombieCluster(player, centerX, centerY, z, count, spread, targetX, targetY, label)
+    count = math.max(0, math.floor(tonumber(count) or 0))
+    if count <= 0 then return 0, nil, "none" end
+
+    spread = math.max(1, math.floor(tonumber(spread) or 1))
+    z = math.floor(tonumber(z) or 0)
+
+    local x1 = math.floor(centerX - spread)
+    local y1 = math.floor(centerY - spread)
+    local width = math.max(1, spread * 2 + 1)
+    local height = width
+    local x2 = x1 + width - 1
+    local y2 = y1 + height - 1
+    local tx = math.floor(tonumber(targetX) or centerX)
+    local ty = math.floor(tonumber(targetY) or centerY)
+    local lastErr = nil
+    local function noteSpawnApiFailure(mode, err)
+        lastErr = err
+        sendDebug(player, "DHE: " .. tostring(label or "horde") .. " spawn API failed: " .. tostring(mode) .. " | " .. tostring(err))
+    end
+
+    -- Keep behavior sound-driven: spawn real server-side zombies, then let one queued noise event attract them.
+    local spawned, manualErr, manualMode = spawnZombieClusterManual(centerX, centerY, z, count, spread)
+    if manualErr ~= nil then lastErr = manualErr end
+    if spawned > 0 then
+        return spawned, lastErr, "manual-" .. tostring(manualMode or "server")
+    end
+
+    -- Last resort only: if direct real-zombie spawning fails entirely, ask the population manager.
+    if serverRuntimeActive() and spawned <= 0 then
+        local hordeInAreaTo = globalCreateHordeInAreaTo or createHordeInAreaTo
+        if type(hordeInAreaTo) == "function" then
+            local ok, err = pcall(function()
+                hordeInAreaTo(x1, y1, width, height, tx, ty, count)
+            end)
+            if ok then return count, nil, "createHordeInAreaTo" end
+            noteSpawnApiFailure("createHordeInAreaTo", err)
+        end
+
+        if ZombiePopulationManager and ZombiePopulationManager.instance then
+            local ok, err = pcall(function()
+                ZombiePopulationManager.instance:createHordeInAreaTo(x1, y1, width, height, tx, ty, count)
+            end)
+            if ok then return count, nil, "ZombiePopulationManager:createHordeInAreaTo" end
+            noteSpawnApiFailure("ZombiePopulationManager:createHordeInAreaTo", err)
+        end
+
+        local hordeSpawn = globalSpawnHorde
+        if type(hordeSpawn) == "function" then
+            local ok, err = pcall(function()
+                hordeSpawn(x1, y1, x2, y2, z, count)
+            end)
+            if ok then return count, nil, "spawnHorde" end
+            noteSpawnApiFailure("spawnHorde", err)
+        end
+    end
+
+    return spawned, lastErr, "none"
 end
 
 local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSeconds, screenEffectSeconds)
@@ -601,29 +838,37 @@ local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSecon
     end)
     if okTargeted then delivered = true end
 
-    -- SP/listen-server fallback: broadcast-style overload. Some B42 SP paths ignore the player overload silently.
-    local okBroadcast, errBroadcast = pcall(function()
-        sendServerCommand(DynamicHordeEvents.CommandModule, "Incoming", payload)
-    end)
-    if okBroadcast then delivered = true end
+    -- SP fallback: broadcast-style overload. Some B42 SP paths ignore the player overload silently.
+    local okBroadcast = false
+    local errBroadcast = nil
+    if not serverRuntimeActive() then
+        okBroadcast, errBroadcast = pcall(function()
+            sendServerCommand(DynamicHordeEvents.CommandModule, "Incoming", payload)
+        end)
+        if okBroadcast then delivered = true end
+    end
 
     -- Single-player fallback: do not call Client.SetIncomingTarget directly from server code.
     -- In B42 SP this can play the sound in the wrong context before the HUD target exists.
     -- Instead, drop a pending payload that the client OnTick handler can consume if both sides share globals.
-    local okPending, errPending = pcall(function()
-        DynamicHordeEvents.PendingIncoming = {
-            x = payload.x,
-            y = payload.y,
-            z = payload.z,
-            count = payload.count,
-            eventType = payload.eventType,
-            indicatorSeconds = payload.indicatorSeconds,
-            screenEffectSeconds = payload.screenEffectSeconds,
-            createdAtMs = getTimestampMs(),
-            source = "server-pending-fallback",
-        }
-    end)
-    if okPending then delivered = true end
+    local okPending = false
+    local errPending = nil
+    if not serverRuntimeActive() then
+        okPending, errPending = pcall(function()
+            DynamicHordeEvents.PendingIncoming = {
+                x = payload.x,
+                y = payload.y,
+                z = payload.z,
+                count = payload.count,
+                eventType = payload.eventType,
+                indicatorSeconds = payload.indicatorSeconds,
+                screenEffectSeconds = payload.screenEffectSeconds,
+                createdAtMs = getTimestampMs(),
+                source = "server-pending-fallback",
+            }
+        end)
+        if okPending then delivered = true end
+    end
 
     if delivered then
         DynamicHordeEvents.DebugPrint("DHE: incoming notification queued/sent for " .. tostring(count) .. " zombies")
@@ -656,19 +901,17 @@ local function spawnHorde(player, forceNear, forceCount)
     local sy = spawnSquare:getY()
     local sz = spawnSquare:getZ()
 
-    local spawned = 0
-    local lastErr = nil
-
-    for _ = 1, count do
-        local ox = sx + ZombRand(-4, 5)
-        local oy = sy + ZombRand(-4, 5)
-        local ok, err = spawnZombieAt(ox, oy, sz)
-        if ok then
-            spawned = spawned + 1
-        else
-            lastErr = err
-        end
-    end
+    local spawned, lastErr, spawnMode = spawnZombieCluster(
+        player,
+        sx,
+        sy,
+        sz,
+        count,
+        4,
+        player:getX(),
+        player:getY(),
+        "normal"
+    )
 
     attractHordeToPlayer(player)
     notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
@@ -680,7 +923,7 @@ local function spawnHorde(player, forceNear, forceCount)
     if not forceNear and not forceCount and scalingMultiplier and scalingMultiplier > 1.0 then
         scalingText = " | scaled from " .. tostring(baseCount) .. " x" .. string.format("%.2f", scalingMultiplier) .. " after " .. string.format("%.1f", daysSurvived or 0) .. " days"
     end
-    sendDebug(player, "DHE: spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. scalingText)
+    sendDebug(player, "DHE: spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " via=" .. tostring(spawnMode) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. scalingText)
     if spawned == 0 and lastErr then
         sendDebug(player, "DHE: spawn API failed: " .. tostring(lastErr))
     end
@@ -772,22 +1015,20 @@ local function spawnWanderingHorde(player, forceCount)
     local spawned = 0
     local lastErr = nil
     for _, cluster in ipairs(clusters) do
-        local clusterSpawned = 0
-        for _ = 1, cluster.count do
-            local ox = cluster.x + ZombRand(-cluster.spread, cluster.spread + 1)
-            local oy = cluster.y + ZombRand(-cluster.spread, cluster.spread + 1)
-            local square = findNearbySpawnableSquare(ox, oy, routeZ, cluster.spread)
-            if square then
-                local ok, err = spawnZombieAt(square:getX(), square:getY(), square:getZ())
-                if ok then
-                    spawned = spawned + 1
-                    clusterSpawned = clusterSpawned + 1
-                else
-                    lastErr = err
-                end
-            end
-        end
-        sendDebug(player, "DHE: wandering cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(routeZ) .. " spread=" .. tostring(cluster.spread))
+        local clusterSpawned, err, mode = spawnZombieCluster(
+            player,
+            cluster.x,
+            cluster.y,
+            routeZ,
+            cluster.count,
+            cluster.spread,
+            tx,
+            ty,
+            "wandering"
+        )
+        spawned = spawned + clusterSpawned
+        if err ~= nil then lastErr = err end
+        sendDebug(player, "DHE: wandering cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " via=" .. tostring(mode) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(routeZ) .. " spread=" .. tostring(cluster.spread))
     end
 
     if spawned <= 0 then
@@ -860,22 +1101,20 @@ local function spawnCataclysmHorde(player)
     local spawned = 0
     local lastErr = nil
     for _, cluster in ipairs(clusters) do
-        local clusterSpawned = 0
-        for _ = 1, cluster.count do
-            local ox = cluster.x + ZombRand(-cluster.spread, cluster.spread + 1)
-            local oy = cluster.y + ZombRand(-cluster.spread, cluster.spread + 1)
-            local square = findNearbySpawnableSquare(ox, oy, sz, cluster.spread)
-            if square then
-                local ok, err = spawnZombieAt(square:getX(), square:getY(), square:getZ())
-                if ok then
-                    spawned = spawned + 1
-                    clusterSpawned = clusterSpawned + 1
-                else
-                    lastErr = err
-                end
-            end
-        end
-        sendDebug(player, "DHE: cataclysm cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(sz))
+        local clusterSpawned, err, mode = spawnZombieCluster(
+            player,
+            cluster.x,
+            cluster.y,
+            sz,
+            cluster.count,
+            cluster.spread,
+            px,
+            py,
+            "cataclysm"
+        )
+        spawned = spawned + clusterSpawned
+        if err ~= nil then lastErr = err end
+        sendDebug(player, "DHE: cataclysm cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " via=" .. tostring(mode) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(sz))
     end
 
     if spawned <= 0 then
@@ -982,6 +1221,7 @@ function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args
 end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
+Events.OnTick.Add(updateAttractionSounds)
 Events.OnGameStart.Add(function()
     scheduleNextSpawn(nil)
     if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end

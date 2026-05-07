@@ -24,6 +24,8 @@
   "Sandbox_DynamicHordeEvents_EnableWarningSound": "Play warning sound",
   "Sandbox_DynamicHordeEvents_AttractionRadius": "Zombie attraction radius",
   "Sandbox_DynamicHordeEvents_AttractionVolume": "Zombie attraction volume",
+  "Sandbox_DynamicHordeEvents_MPAttractionDelaySeconds": "MP attraction delay, seconds",
+  "Sandbox_DynamicHordeEvents_MPAttractionDelaySeconds_tooltip": "Delay before the single attraction sound is emitted after spawning zombies in multiplayer. Values below 6 seconds not attracting spawned MP zombies. Increase if server has high load",
   "Sandbox_DynamicHordeEvents_AvoidIndoorSpawn": "Avoid indoor spawn squares",
   "Sandbox_DynamicHordeEvents_SpawnSearchAttempts": "Spawn search attempts",
   "Sandbox_DynamicHordeEvents_Debug": "Enable debug logging",
