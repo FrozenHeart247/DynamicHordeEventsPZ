@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.5-mp-active-spawn-clamp"
+DynamicHordeEvents.Version = "0.9.5-mp-fix"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
