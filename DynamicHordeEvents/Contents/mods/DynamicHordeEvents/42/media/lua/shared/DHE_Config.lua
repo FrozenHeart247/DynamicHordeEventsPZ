@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.8.9-mp-delay-default"
+DynamicHordeEvents.Version = "0.9.5-mp-active-spawn-clamp"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
@@ -30,6 +30,8 @@ DynamicHordeEvents.Defaults = {
     AttractionRadius = 500,
     AttractionVolume = 500,
     MPAttractionDelaySeconds = 7,
+    EnableMPActiveSpawnClamp = true,
+    MPActiveSpawnMaxRadius = 75,
     AvoidIndoorSpawn = true,
     SpawnSearchAttempts = 64,
     Debug = false,
@@ -49,6 +51,8 @@ DynamicHordeEvents.Defaults = {
     CataclysmIndicatorSeconds = 45,
     CataclysmAttractionRadius = 800,
     CataclysmAttractionVolume = 800,
+    EnableCataclysmPursuit = true,
+    CataclysmPursuitHours = 4.0,
     EnableCataclysmWeather = true,
     CataclysmWeatherDurationHours = 8,
     EnableCataclysmFogWind = true,

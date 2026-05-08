@@ -145,6 +145,30 @@ local function pickTargetPlayer()
     return players[randomBetween(1, #players)]
 end
 
+local function multiplayerServerRuntimeActive()
+    local active = false
+    pcall(function()
+        active = isServer and isServer() == true
+    end)
+    return active
+end
+
+local function applyMPActiveSpawnClamp(minRadius, maxRadius)
+    minRadius = tonumber(minRadius) or 0
+    maxRadius = tonumber(maxRadius) or minRadius
+    if maxRadius < minRadius then maxRadius = minRadius end
+
+    if not multiplayerServerRuntimeActive() or not DynamicHordeEvents.GetBool("EnableMPActiveSpawnClamp") then
+        return minRadius, maxRadius
+    end
+
+    local activeMax = math.max(30, DynamicHordeEvents.GetNumber("MPActiveSpawnMaxRadius"))
+    minRadius = math.min(minRadius, activeMax)
+    maxRadius = math.min(maxRadius, activeMax)
+    if maxRadius < minRadius then minRadius = maxRadius end
+    return minRadius, maxRadius
+end
+
 local function squareIsUsable(square)
     if not square then return false end
     local solid = false
@@ -167,11 +191,17 @@ local function findSpawnSquare(player, forceNear)
     local minRadius = DynamicHordeEvents.GetNumber("MinSpawnRadius")
     local maxRadius = DynamicHordeEvents.GetNumber("MaxSpawnRadius")
     local attempts = DynamicHordeEvents.GetNumber("SpawnSearchAttempts")
+    local clampedForMP = false
 
     if forceNear then
         minRadius = DynamicHordeEvents.GetNumber("TestSpawnRadius")
         maxRadius = minRadius
         attempts = 24
+    else
+        local originalMinRadius = minRadius
+        local originalMaxRadius = maxRadius
+        minRadius, maxRadius = applyMPActiveSpawnClamp(minRadius, maxRadius)
+        clampedForMP = minRadius ~= originalMinRadius or maxRadius ~= originalMaxRadius
     end
 
     local z = playerSquare:getZ()
@@ -183,6 +213,10 @@ local function findSpawnSquare(player, forceNear)
         local y = math.floor(playerSquare:getY() + math.sin(angle) * radius)
         local square = getCell():getGridSquare(x, y, z)
         if squareIsUsable(square) then return square end
+    end
+
+    if clampedForMP then
+        sendDebug(player, "DHE: MP active spawn clamp used for normal horde radius " .. tostring(minRadius) .. "-" .. tostring(maxRadius))
     end
 
     -- Fallback: player square offset. This may be less clean but helps debugging.
@@ -243,9 +277,13 @@ local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
     if square then return square end
 
     -- 2) normal horde distance, usually more likely to be loaded
-    square = tryRandomRing(
+    local fallbackMinRadius, fallbackMaxRadius = applyMPActiveSpawnClamp(
         DynamicHordeEvents.GetNumber("MinSpawnRadius"),
-        DynamicHordeEvents.GetNumber("MaxSpawnRadius"),
+        DynamicHordeEvents.GetNumber("MaxSpawnRadius")
+    )
+    square = tryRandomRing(
+        fallbackMinRadius,
+        fallbackMaxRadius,
         attempts,
         true
     )
@@ -449,6 +487,274 @@ local function attractWanderingToExitPoint(player, targetX, targetY, targetZ)
     local radius = DynamicHordeEvents.GetNumber("WanderingAttractionRadius")
     local volume = DynamicHordeEvents.GetNumber("WanderingAttractionVolume")
     queueAttractionSound(player, targetX, targetY, targetZ, radius, volume, "wandering", false)
+end
+
+local cataclysmPursuitZombies = {}
+local cataclysmPursuitSyncs = {}
+local cataclysmPursuitSyncId = 0
+local spawnCataclysmCatchup = nil
+local CATACLYSM_PURSUIT_REFRESH_MS = 3000
+local CATACLYSM_PURSUIT_PATH_REFRESH_MS = 15000
+local CATACLYSM_PURSUIT_SYNC_MS = 3000
+local CATACLYSM_PURSUIT_CLIENT_LIFE_MS = 10000
+local CATACLYSM_CATCHUP_DISTANCE = 85
+local CATACLYSM_CATCHUP_MIN_MS = 15000
+local CATACLYSM_CATCHUP_FAIL_RETRY_MS = 5000
+local CATACLYSM_CATCHUP_SPAWN_RADIUS = 85
+local CATACLYSM_CATCHUP_BATCH_FRACTION = 0.25
+local CATACLYSM_CATCHUP_MAX_BATCH = 80
+
+local function getCataclysmPursuitHours()
+    return math.max(0.25, DynamicHordeEvents.GetNumber("CataclysmPursuitHours"))
+end
+
+local function worldAgeHours()
+    local hours = 0
+    pcall(function() hours = getGameTime():getWorldAgeHours() end)
+    return tonumber(hours) or 0
+end
+
+local function nowMs()
+    local ms = 0
+    pcall(function() ms = getTimestampMs() end)
+    return tonumber(ms) or 0
+end
+
+local function getCataclysmPursuitStartDelayMs()
+    local _, delaySeconds = getAttractionSoundDelay()
+    return math.max(0, math.floor(((tonumber(delaySeconds) or 0) + 0.5) * 1000))
+end
+
+local function getPlayerOnlineId(player)
+    local onlineId = nil
+    if player then
+        pcall(function() onlineId = player:getOnlineID() end)
+    end
+    return onlineId
+end
+
+local function sendCataclysmPursuitSync(sync)
+    if not sync or not sync.player then return 0 end
+
+    local targetX = sync.player:getX()
+    local targetY = sync.player:getY()
+    local targetZ = sync.player:getZ()
+    local payload = {
+        id = sync.id,
+        spawnX = sync.spawnX,
+        spawnY = sync.spawnY,
+        z = sync.z,
+        targetX = targetX,
+        targetY = targetY,
+        targetZ = targetZ,
+        margin = sync.margin,
+        count = sync.count,
+        clientLifeMs = CATACLYSM_PURSUIT_CLIENT_LIFE_MS,
+        targetOnlineID = sync.targetOnlineID,
+    }
+
+    local sent = 0
+    local players = getPlayerList()
+    for _, recipient in ipairs(players) do
+        local ok = pcall(function()
+            sendServerCommand(recipient, DynamicHordeEvents.CommandModule, "CataclysmPursuitUpdate", payload)
+        end)
+        if ok then sent = sent + 1 end
+    end
+
+    if sent <= 0 and not serverRuntimeActive() then
+        pcall(function()
+            DynamicHordeEvents.PendingCataclysmPursuit = payload
+            sent = 1
+        end)
+    end
+
+    return sent
+end
+
+local function startCataclysmPursuitSync(player, spawnX, spawnY, z, count)
+    local pursuitHours = getCataclysmPursuitHours()
+    local startDelayMs = getCataclysmPursuitStartDelayMs()
+    if not DynamicHordeEvents.GetBool("EnableCataclysmPursuit") then return false, pursuitHours, startDelayMs / 1000.0 end
+
+    cataclysmPursuitSyncId = cataclysmPursuitSyncId + 1
+    local now = worldAgeHours()
+    local ms = nowMs()
+    local margin = 100
+
+    table.insert(cataclysmPursuitSyncs, {
+        id = cataclysmPursuitSyncId,
+        player = player,
+        spawnX = spawnX,
+        spawnY = spawnY,
+        z = z,
+        count = count,
+        margin = margin,
+        anchorX = spawnX,
+        anchorY = spawnY,
+        lastTargetX = player:getX(),
+        lastTargetY = player:getY(),
+        targetOnlineID = getPlayerOnlineId(player),
+        expiresAt = now + pursuitHours,
+        nextSyncAtMs = ms + startDelayMs,
+        nextCatchupAtMs = ms + startDelayMs + CATACLYSM_CATCHUP_MIN_MS,
+        catchupSpawned = 0,
+        catchupMax = math.max(0, math.floor(tonumber(count) or 0)),
+        started = false,
+    })
+
+    return true, pursuitHours, startDelayMs / 1000.0
+end
+
+local function playerIsDeadOrMissing(player)
+    if not player then return true end
+    local ok, dead = pcall(function() return player:isDead() end)
+    return ok and dead == true
+end
+
+local function zombieIsDeadOrMissing(zombie)
+    if not zombie then return true end
+    local ok, dead = pcall(function() return zombie:isDead() end)
+    return ok and dead == true
+end
+
+local function commandCataclysmZombieAtPlayer(zombie, player, forcePath)
+    if zombieIsDeadOrMissing(zombie) or playerIsDeadOrMissing(player) then return false end
+
+    local applied = false
+    local function try(fn)
+        local ok = pcall(fn)
+        if ok then applied = true end
+    end
+
+    local px = player:getX()
+    local py = player:getY()
+    local pz = player:getZ()
+    local sx = math.floor(px)
+    local sy = math.floor(py)
+    local sz = math.floor(pz)
+
+    try(function() zombie:setTarget(player) end)
+    try(function() zombie:addAggro(player, 1000.0) end)
+    try(function() zombie:spotted(player, true) end)
+    try(function() zombie:setLastHeardSound(sx, sy, sz) end)
+    try(function() zombie:setUseless(false) end)
+    try(function() zombie:makeInactive(false) end)
+    try(function() zombie:setVariable("bMoving", true) end)
+
+    if forcePath then
+        try(function() zombie:pathToCharacter(player) end)
+        try(function() zombie:pathToSound(sx, sy, sz) end)
+        try(function() zombie:pathToLocationF(px, py, pz) end)
+    end
+
+    return applied
+end
+
+local function clearCataclysmZombieTarget(zombie, player)
+    if not zombie then return end
+
+    pcall(function()
+        if zombie:getTarget() == player then
+            zombie:setTarget(nil)
+        end
+    end)
+    pcall(function() zombie:clearAggroList() end)
+end
+
+local function startCataclysmPursuit(player, zombies)
+    local pursuitHours = getCataclysmPursuitHours()
+    local startDelayMs = getCataclysmPursuitStartDelayMs()
+    if not DynamicHordeEvents.GetBool("EnableCataclysmPursuit") then return 0, pursuitHours, false, startDelayMs / 1000.0 end
+    if not zombies or #zombies == 0 then return 0, pursuitHours, true, startDelayMs / 1000.0 end
+
+    local now = worldAgeHours()
+    local expiresAt = now + pursuitHours
+    local startAtMs = nowMs() + startDelayMs
+    local added = 0
+
+    for _, zombie in ipairs(zombies) do
+        if not zombieIsDeadOrMissing(zombie) then
+            table.insert(cataclysmPursuitZombies, {
+                zombie = zombie,
+                player = player,
+                expiresAt = expiresAt,
+                nextRefreshAtMs = startAtMs,
+                nextPathAtMs = startAtMs,
+                started = false,
+            })
+            added = added + 1
+        end
+    end
+
+    return added, pursuitHours, true, startDelayMs / 1000.0
+end
+
+local function updateCataclysmPursuit()
+    if #cataclysmPursuitZombies == 0 then return end
+
+    local now = worldAgeHours()
+    local ms = nowMs()
+    local enabled = DynamicHordeEvents.GetBool("EnableCataclysmPursuit")
+    local startedCount = 0
+    local debugPlayer = nil
+    local i = 1
+    while i <= #cataclysmPursuitZombies do
+        local entry = cataclysmPursuitZombies[i]
+        if not enabled or now >= (entry.expiresAt or 0) or zombieIsDeadOrMissing(entry.zombie) or playerIsDeadOrMissing(entry.player) then
+            clearCataclysmZombieTarget(entry.zombie, entry.player)
+            table.remove(cataclysmPursuitZombies, i)
+        elseif ms >= (entry.nextRefreshAtMs or 0) then
+            local wasStarted = entry.started
+            local forcePath = (not entry.started) or ms >= (entry.nextPathAtMs or 0)
+            commandCataclysmZombieAtPlayer(entry.zombie, entry.player, forcePath)
+            entry.started = true
+            if not wasStarted then
+                startedCount = startedCount + 1
+                debugPlayer = debugPlayer or entry.player
+            end
+            entry.nextRefreshAtMs = ms + CATACLYSM_PURSUIT_REFRESH_MS
+            if forcePath then
+                entry.nextPathAtMs = ms + CATACLYSM_PURSUIT_PATH_REFRESH_MS
+            end
+            i = i + 1
+        else
+            i = i + 1
+        end
+    end
+
+    if startedCount > 0 then
+        sendDebug(debugPlayer, "DHE: CATACLYSM pursuit started for " .. tostring(startedCount) .. " zombie(s)")
+    end
+end
+
+local function updateCataclysmPursuitSyncs()
+    if #cataclysmPursuitSyncs == 0 then return end
+
+    local now = worldAgeHours()
+    local ms = nowMs()
+    local enabled = DynamicHordeEvents.GetBool("EnableCataclysmPursuit")
+    local i = 1
+    while i <= #cataclysmPursuitSyncs do
+        local sync = cataclysmPursuitSyncs[i]
+        if not enabled or now >= (sync.expiresAt or 0) or playerIsDeadOrMissing(sync.player) then
+            table.remove(cataclysmPursuitSyncs, i)
+        elseif ms >= (sync.nextSyncAtMs or 0) then
+            local wasStarted = sync.started
+            if spawnCataclysmCatchup then
+                spawnCataclysmCatchup(sync)
+            end
+            local sent = sendCataclysmPursuitSync(sync)
+            sync.started = true
+            sync.nextSyncAtMs = ms + CATACLYSM_PURSUIT_SYNC_MS
+            if not wasStarted then
+                sendDebug(sync.player, "DHE: CATACLYSM client pursuit sync started for " .. tostring(sent) .. " client(s)")
+            end
+            i = i + 1
+        else
+            i = i + 1
+        end
+    end
 end
 
 local function getClimateFloatConstant(cm, name, fallback)
@@ -663,28 +969,53 @@ end
 local globalCreateHordeInAreaTo = createHordeInAreaTo
 local globalSpawnHorde = spawnHorde
 
-local function spawnedZombieCount(result)
-    if result == nil then return 0 end
+local function collectSpawnedZombies(result)
+    local zombies = {}
+    if result == nil then return zombies end
 
     local okZombie, isZombie = pcall(function()
         return result:isZombie()
     end)
-    if okZombie and isZombie then return 1 end
+    if okZombie and isZombie then
+        table.insert(zombies, result)
+        return zombies
+    end
 
     local okSize, size = pcall(function()
         return result:size()
     end)
-    if okSize and tonumber(size) and tonumber(size) > 0 then
-        return tonumber(size)
+    size = tonumber(size) or 0
+    if okSize and size > 0 then
+        for i = 0, size - 1 do
+            local okItem, item = pcall(function()
+                return result:get(i)
+            end)
+            if okItem and item then
+                local okItemZombie, itemIsZombie = pcall(function()
+                    return item:isZombie()
+                end)
+                if okItemZombie and itemIsZombie then
+                    table.insert(zombies, item)
+                end
+            end
+        end
     end
 
-    return 0
+    return zombies
+end
+
+local function appendZombies(target, source)
+    if not source then return end
+    for _, zombie in ipairs(source) do
+        table.insert(target, zombie)
+    end
 end
 
 local function spawnZombieAt(x, y, z)
     local success = false
     local lastErr = nil
     local spawnMode = nil
+    local spawnedZombies = {}
 
     local variants = {
         {
@@ -724,39 +1055,43 @@ local function spawnZombieAt(x, y, z)
 
     for _, variant in ipairs(variants) do
         local ok, result = pcall(variant.fn)
-        if ok and spawnedZombieCount(result) > 0 then
+        local zombies = ok and collectSpawnedZombies(result) or {}
+        if ok and #zombies > 0 then
             success = true
             spawnMode = variant.mode
+            spawnedZombies = zombies
             break
         else
             lastErr = ok and (tostring(variant.mode) .. " returned no zombie") or result
         end
     end
 
-    return success, lastErr, spawnMode
+    return success, lastErr, spawnMode, spawnedZombies
 end
 
 local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
     local spawned = 0
     local lastErr = nil
     local firstMode = nil
+    local spawnedZombies = {}
 
     for _ = 1, count do
         local ox = math.floor(centerX + ZombRand(-spread, spread + 1))
         local oy = math.floor(centerY + ZombRand(-spread, spread + 1))
         local square = findNearbySpawnableSquare(ox, oy, z, spread)
         if square then
-            local ok, err, mode = spawnZombieAt(square:getX(), square:getY(), square:getZ())
+            local ok, err, mode, zombies = spawnZombieAt(square:getX(), square:getY(), square:getZ())
             if ok then
                 spawned = spawned + 1
                 firstMode = firstMode or mode
+                appendZombies(spawnedZombies, zombies)
             else
                 lastErr = err
             end
         end
     end
 
-    return spawned, lastErr, firstMode
+    return spawned, lastErr, firstMode, spawnedZombies
 end
 
 local function spawnZombieCluster(player, centerX, centerY, z, count, spread, targetX, targetY, label)
@@ -781,10 +1116,10 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
     end
 
     -- Keep behavior sound-driven: spawn real server-side zombies, then let one queued noise event attract them.
-    local spawned, manualErr, manualMode = spawnZombieClusterManual(centerX, centerY, z, count, spread)
+    local spawned, manualErr, manualMode, spawnedZombies = spawnZombieClusterManual(centerX, centerY, z, count, spread)
     if manualErr ~= nil then lastErr = manualErr end
     if spawned > 0 then
-        return spawned, lastErr, "manual-" .. tostring(manualMode or "server")
+        return spawned, lastErr, "manual-" .. tostring(manualMode or "server"), spawnedZombies
     end
 
     -- Last resort only: if direct real-zombie spawning fails entirely, ask the population manager.
@@ -794,7 +1129,7 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
             local ok, err = pcall(function()
                 hordeInAreaTo(x1, y1, width, height, tx, ty, count)
             end)
-            if ok then return count, nil, "createHordeInAreaTo" end
+            if ok then return count, nil, "createHordeInAreaTo", nil end
             noteSpawnApiFailure("createHordeInAreaTo", err)
         end
 
@@ -802,7 +1137,7 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
             local ok, err = pcall(function()
                 ZombiePopulationManager.instance:createHordeInAreaTo(x1, y1, width, height, tx, ty, count)
             end)
-            if ok then return count, nil, "ZombiePopulationManager:createHordeInAreaTo" end
+            if ok then return count, nil, "ZombiePopulationManager:createHordeInAreaTo", nil end
             noteSpawnApiFailure("ZombiePopulationManager:createHordeInAreaTo", err)
         end
 
@@ -811,12 +1146,97 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
             local ok, err = pcall(function()
                 hordeSpawn(x1, y1, x2, y2, z, count)
             end)
-            if ok then return count, nil, "spawnHorde" end
+            if ok then return count, nil, "spawnHorde", nil end
             noteSpawnApiFailure("spawnHorde", err)
         end
     end
 
-    return spawned, lastErr, "none"
+    return spawned, lastErr, "none", nil
+end
+
+spawnCataclysmCatchup = function(sync)
+    if not sync or playerIsDeadOrMissing(sync.player) then return 0 end
+
+    local ms = nowMs()
+    if ms < (sync.nextCatchupAtMs or 0) then return 0 end
+
+    local px = sync.player:getX()
+    local py = sync.player:getY()
+    local pz = sync.player:getZ()
+    local anchorX = tonumber(sync.anchorX) or tonumber(sync.spawnX) or px
+    local anchorY = tonumber(sync.anchorY) or tonumber(sync.spawnY) or py
+    local dx = px - anchorX
+    local dy = py - anchorY
+    local distance = math.sqrt((dx * dx) + (dy * dy))
+    if distance < CATACLYSM_CATCHUP_DISTANCE then return 0 end
+
+    local remaining = math.max(0, (tonumber(sync.catchupMax) or 0) - (tonumber(sync.catchupSpawned) or 0))
+    if remaining <= 0 then
+        sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_MIN_MS
+        return 0
+    end
+
+    local moveX = px - (tonumber(sync.lastTargetX) or anchorX)
+    local moveY = py - (tonumber(sync.lastTargetY) or anchorY)
+    local moveLen = math.sqrt((moveX * moveX) + (moveY * moveY))
+    if moveLen < 3 then
+        moveX = dx
+        moveY = dy
+        moveLen = distance
+    end
+    if moveLen <= 0 then
+        sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_FAIL_RETRY_MS
+        return 0
+    end
+
+    local dirX = moveX / moveLen
+    local dirY = moveY / moveLen
+    local baseX = math.floor(px - (dirX * CATACLYSM_CATCHUP_SPAWN_RADIUS))
+    local baseY = math.floor(py - (dirY * CATACLYSM_CATCHUP_SPAWN_RADIUS))
+    local baseZ = math.floor(tonumber(pz) or tonumber(sync.z) or 0)
+    local baseSquare = findUsableSquareNearPoint(baseX, baseY, baseZ, 18, true)
+    if not baseSquare then
+        sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_FAIL_RETRY_MS
+        sendDebug(sync.player, "DHE: CATACLYSM catch-up skipped: no square near " .. tostring(baseX) .. "," .. tostring(baseY) .. "," .. tostring(baseZ))
+        return 0
+    end
+
+    local batch = math.floor((tonumber(sync.count) or 0) * CATACLYSM_CATCHUP_BATCH_FRACTION)
+    batch = math.min(remaining, math.max(12, math.min(CATACLYSM_CATCHUP_MAX_BATCH, batch)))
+
+    local sx = baseSquare:getX()
+    local sy = baseSquare:getY()
+    local sz = baseSquare:getZ()
+    local spawned, err, mode = spawnZombieCluster(
+        sync.player,
+        sx,
+        sy,
+        sz,
+        batch,
+        7,
+        px,
+        py,
+        "cataclysm-catchup"
+    )
+
+    if spawned <= 0 then
+        sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_FAIL_RETRY_MS
+        if err then sendDebug(sync.player, "DHE: CATACLYSM catch-up spawn failed: " .. tostring(err)) end
+        return 0
+    end
+
+    sync.spawnX = sx
+    sync.spawnY = sy
+    sync.z = sz
+    sync.anchorX = sx
+    sync.anchorY = sy
+    sync.lastTargetX = px
+    sync.lastTargetY = py
+    sync.catchupSpawned = (tonumber(sync.catchupSpawned) or 0) + spawned
+    sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_MIN_MS
+
+    sendDebug(sync.player, "DHE: CATACLYSM catch-up spawned=" .. tostring(spawned) .. "/" .. tostring(batch) .. " via=" .. tostring(mode) .. " near " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. " dist=" .. tostring(math.floor(distance)) .. " extra=" .. tostring(sync.catchupSpawned) .. "/" .. tostring(sync.catchupMax))
+    return spawned
 end
 
 local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSeconds, screenEffectSeconds)
@@ -952,10 +1372,11 @@ local function spawnWanderingHorde(player, forceCount)
     local perpX = -dirY
     local perpY = dirX
 
-    local spawnRadius = randomBetween(
+    local wanderingMinRadius, wanderingMaxRadius = applyMPActiveSpawnClamp(
         DynamicHordeEvents.GetNumber("WanderingMinSpawnRadius"),
         DynamicHordeEvents.GetNumber("WanderingMaxSpawnRadius")
     )
+    local spawnRadius = randomBetween(wanderingMinRadius, wanderingMaxRadius)
     local exitDistance = math.max(spawnRadius + 60, DynamicHordeEvents.GetNumber("WanderingExitDistance"))
     local spread = math.max(6, DynamicHordeEvents.GetNumber("WanderingSpread"))
 
@@ -971,8 +1392,8 @@ local function spawnWanderingHorde(player, forceCount)
         -- Loaded chunks can be awkward. Fall back to normal search, but keep the exit point behavior.
         baseSquare = findSpawnSquareCustom(
             player,
-            DynamicHordeEvents.GetNumber("WanderingMinSpawnRadius"),
-            DynamicHordeEvents.GetNumber("WanderingMaxSpawnRadius"),
+            wanderingMinRadius,
+            wanderingMaxRadius,
             DynamicHordeEvents.GetNumber("SpawnSearchAttempts")
         )
     end
@@ -1100,8 +1521,9 @@ local function spawnCataclysmHorde(player)
 
     local spawned = 0
     local lastErr = nil
+    local cataclysmZombies = {}
     for _, cluster in ipairs(clusters) do
-        local clusterSpawned, err, mode = spawnZombieCluster(
+        local clusterSpawned, err, mode, zombies = spawnZombieCluster(
             player,
             cluster.x,
             cluster.y,
@@ -1114,6 +1536,7 @@ local function spawnCataclysmHorde(player)
         )
         spawned = spawned + clusterSpawned
         if err ~= nil then lastErr = err end
+        appendZombies(cataclysmZombies, zombies)
         sendDebug(player, "DHE: cataclysm cluster spawned=" .. tostring(clusterSpawned) .. "/" .. tostring(cluster.count) .. " via=" .. tostring(mode) .. " near " .. tostring(cluster.x) .. "," .. tostring(cluster.y) .. "," .. tostring(sz))
     end
 
@@ -1121,6 +1544,18 @@ local function spawnCataclysmHorde(player)
         sendDebug(player, "DHE: cataclysm found base square but spawned 0 zombies. base=" .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz))
         if lastErr then sendDebug(player, "DHE: cataclysm spawn API failed: " .. tostring(lastErr)) end
         return false
+    end
+
+    local pursued, pursuitHours, pursuitEnabled, pursuitDelaySeconds = startCataclysmPursuit(player, cataclysmZombies)
+    if pursuitEnabled then
+        sendDebug(player, "DHE: CATACLYSM pursuit queued for " .. tostring(pursued) .. "/" .. tostring(#cataclysmZombies) .. " zombie(s), starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
+    else
+        sendDebug(player, "DHE: CATACLYSM pursuit disabled in sandbox")
+    end
+
+    local syncEnabled, syncHours, syncDelaySeconds = startCataclysmPursuitSync(player, sx, sy, sz, spawned)
+    if syncEnabled then
+        sendDebug(player, "DHE: CATACLYSM client pursuit sync queued, starts in " .. tostring(syncDelaySeconds) .. " sec, duration=" .. tostring(syncHours) .. " game hour(s)")
     end
 
     attractCataclysmToPlayer(player)
@@ -1222,6 +1657,8 @@ end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
 Events.OnTick.Add(updateAttractionSounds)
+Events.OnTick.Add(updateCataclysmPursuit)
+Events.OnTick.Add(updateCataclysmPursuitSyncs)
 Events.OnGameStart.Add(function()
     scheduleNextSpawn(nil)
     if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end

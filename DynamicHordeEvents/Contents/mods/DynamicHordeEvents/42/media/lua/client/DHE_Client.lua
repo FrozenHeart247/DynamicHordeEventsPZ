@@ -9,6 +9,10 @@ DynamicHordeEvents.Client.LastMessage = nil
 DynamicHordeEvents.Client.LastMessageAt = 0
 DynamicHordeEvents.Client.LastPendingHandledAt = 0
 DynamicHordeEvents.Client.PendingSpeech = nil
+DynamicHordeEvents.Client.CataclysmPursuits = DynamicHordeEvents.Client.CataclysmPursuits or {}
+
+local CATACLYSM_CLIENT_PURSUIT_UPDATE_MS = 1000
+local CATACLYSM_CLIENT_PURSUIT_REPORT_MS = 10000
 
 local function getPlayer()
     return getSpecificPlayer(0)
@@ -291,6 +295,155 @@ function DynamicHordeEvents.Client.Request(command)
     sendClientCommand(player, DynamicHordeEvents.CommandModule, command, {})
 end
 
+local function clientNowMs()
+    local ms = 0
+    pcall(function() ms = getTimestampMs() end)
+    return tonumber(ms) or 0
+end
+
+local function localPlayerForPursuit(pursuit)
+    local player = getPlayer()
+    if not player then return nil end
+
+    if pursuit.targetOnlineID ~= nil then
+        local onlineId = nil
+        pcall(function() onlineId = player:getOnlineID() end)
+        if tostring(onlineId) == tostring(pursuit.targetOnlineID) then return player end
+    end
+
+    local dx = math.abs((player:getX() or 0) - (pursuit.targetX or 0))
+    local dy = math.abs((player:getY() or 0) - (pursuit.targetY or 0))
+    if dx <= 6 and dy <= 6 then return player end
+
+    return nil
+end
+
+local function zombieLooksValid(zombie)
+    if not zombie then return false end
+    local dead = false
+    local ok = pcall(function() dead = zombie:isDead() end)
+    return (not ok) or dead ~= true
+end
+
+local function zombieInsidePursuitArea(zombie, pursuit)
+    if not zombieLooksValid(zombie) then return false end
+
+    local zx, zy, zz = 0, 0, 0
+    local ok = pcall(function()
+        zx = zombie:getX()
+        zy = zombie:getY()
+        zz = zombie:getZ()
+    end)
+    if not ok then return false end
+
+    local targetZ = tonumber(pursuit.targetZ) or tonumber(pursuit.z) or 0
+    if math.abs((tonumber(zz) or 0) - targetZ) > 0.6 then return false end
+
+    local margin = math.max(40, tonumber(pursuit.margin) or 100)
+    local minX = math.min(tonumber(pursuit.spawnX) or 0, tonumber(pursuit.targetX) or 0) - margin
+    local maxX = math.max(tonumber(pursuit.spawnX) or 0, tonumber(pursuit.targetX) or 0) + margin
+    local minY = math.min(tonumber(pursuit.spawnY) or 0, tonumber(pursuit.targetY) or 0) - margin
+    local maxY = math.max(tonumber(pursuit.spawnY) or 0, tonumber(pursuit.targetY) or 0) + margin
+
+    return zx >= minX and zx <= maxX and zy >= minY and zy <= maxY
+end
+
+local function commandLocalCataclysmZombie(zombie, pursuit, targetPlayer)
+    local tx = tonumber(pursuit.targetX) or 0
+    local ty = tonumber(pursuit.targetY) or 0
+    local tz = tonumber(pursuit.targetZ) or tonumber(pursuit.z) or 0
+    local sx = math.floor(tx)
+    local sy = math.floor(ty)
+    local sz = math.floor(tz)
+
+    local applied = false
+    local function try(fn)
+        local ok = pcall(fn)
+        if ok then applied = true end
+    end
+
+    try(function() zombie:setLastHeardSound(sx, sy, sz) end)
+    if targetPlayer then
+        try(function() zombie:setTarget(targetPlayer) end)
+        try(function() zombie:addAggro(targetPlayer, 1000.0) end)
+        try(function() zombie:spotted(targetPlayer, true) end)
+    end
+    try(function() zombie:pathToLocation(sx, sy, sz) end)
+    try(function() zombie:pathToLocationF(tx, ty, tz) end)
+    try(function() zombie:pathToSound(sx, sy, sz) end)
+    try(function() zombie:setUseless(false) end)
+    try(function() zombie:makeInactive(false) end)
+    try(function() zombie:setVariable("bMoving", true) end)
+
+    return applied
+end
+
+function DynamicHordeEvents.Client.ReceiveCataclysmPursuit(args)
+    args = args or {}
+    local id = tostring(args.id or "cataclysm")
+    local now = clientNowMs()
+    local pursuit = DynamicHordeEvents.Client.CataclysmPursuits[id] or {}
+
+    pursuit.id = id
+    pursuit.spawnX = tonumber(args.spawnX) or pursuit.spawnX or 0
+    pursuit.spawnY = tonumber(args.spawnY) or pursuit.spawnY or 0
+    pursuit.z = tonumber(args.z) or pursuit.z or 0
+    pursuit.targetX = tonumber(args.targetX) or pursuit.targetX or 0
+    pursuit.targetY = tonumber(args.targetY) or pursuit.targetY or 0
+    pursuit.targetZ = tonumber(args.targetZ) or pursuit.targetZ or pursuit.z
+    pursuit.margin = tonumber(args.margin) or pursuit.margin or 100
+    pursuit.count = tonumber(args.count) or pursuit.count or 0
+    pursuit.targetOnlineID = args.targetOnlineID
+    pursuit.expiresAtMs = now + math.max(3000, tonumber(args.clientLifeMs) or 10000)
+    pursuit.nextUpdateAtMs = math.min(tonumber(pursuit.nextUpdateAtMs) or now, now)
+
+    DynamicHordeEvents.Client.CataclysmPursuits[id] = pursuit
+end
+
+function DynamicHordeEvents.Client.ApplyCataclysmPursuit(pursuit)
+    local cell = getCell()
+    if not cell then return 0 end
+
+    local zombies = nil
+    local okList = pcall(function() zombies = cell:getZombieList() end)
+    if not okList or not zombies then return 0 end
+
+    local targetPlayer = localPlayerForPursuit(pursuit)
+    local applied = 0
+    for i = 0, zombies:size() - 1 do
+        local zombie = zombies:get(i)
+        if zombieInsidePursuitArea(zombie, pursuit) then
+            if commandLocalCataclysmZombie(zombie, pursuit, targetPlayer) then
+                applied = applied + 1
+            end
+        end
+    end
+
+    return applied
+end
+
+function DynamicHordeEvents.Client.UpdateCataclysmPursuits()
+    local pending = DynamicHordeEvents.PendingCataclysmPursuit
+    if pending then
+        DynamicHordeEvents.PendingCataclysmPursuit = nil
+        DynamicHordeEvents.Client.ReceiveCataclysmPursuit(pending)
+    end
+
+    local now = clientNowMs()
+    for id, pursuit in pairs(DynamicHordeEvents.Client.CataclysmPursuits) do
+        if now >= (tonumber(pursuit.expiresAtMs) or 0) then
+            DynamicHordeEvents.Client.CataclysmPursuits[id] = nil
+        elseif now >= (tonumber(pursuit.nextUpdateAtMs) or 0) then
+            local applied = DynamicHordeEvents.Client.ApplyCataclysmPursuit(pursuit)
+            pursuit.nextUpdateAtMs = now + CATACLYSM_CLIENT_PURSUIT_UPDATE_MS
+            if now >= (tonumber(pursuit.nextReportAtMs) or 0) then
+                DynamicHordeEvents.DebugPrint("DHE: cataclysm client pursuit nudged " .. tostring(applied) .. " local zombie(s)")
+                pursuit.nextReportAtMs = now + CATACLYSM_CLIENT_PURSUIT_REPORT_MS
+            end
+        end
+    end
+end
+
 
 function DynamicHordeEvents.Client.ConsumePendingIncoming()
     DynamicHordeEvents.Client.ProcessPendingSpeech()
@@ -308,6 +461,7 @@ end
 
 if Events.OnTick then
     Events.OnTick.Add(DynamicHordeEvents.Client.ConsumePendingIncoming)
+    Events.OnTick.Add(DynamicHordeEvents.Client.UpdateCataclysmPursuits)
 end
 
 function DynamicHordeEvents.Client.OnServerCommand(module, command, args)
@@ -315,6 +469,8 @@ function DynamicHordeEvents.Client.OnServerCommand(module, command, args)
 
     if command == "Incoming" then
         DynamicHordeEvents.Client.SetIncomingTarget(args, false)
+    elseif command == "CataclysmPursuitUpdate" then
+        DynamicHordeEvents.Client.ReceiveCataclysmPursuit(args)
     elseif command == "DebugMessage" then
         DynamicHordeEvents.Client.ShowMessage(args and args.text or "DHE: debug message")
     end
@@ -325,5 +481,6 @@ Events.OnServerCommand.Add(DynamicHordeEvents.Client.OnServerCommand)
 Events.OnGameStart.Add(function()
     DynamicHordeEvents.Client.Target = nil
     DynamicHordeEvents.Client.PendingSpeech = nil
+    DynamicHordeEvents.Client.CataclysmPursuits = {}
     DynamicHordeEvents.DebugPrint("DHE client loaded " .. tostring(DynamicHordeEvents.Version))
 end)

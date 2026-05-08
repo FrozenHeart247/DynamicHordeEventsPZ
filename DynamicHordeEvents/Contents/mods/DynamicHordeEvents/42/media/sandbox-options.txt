@@ -202,6 +202,24 @@ option DynamicHordeEvents.MPAttractionDelaySeconds
     translation = DynamicHordeEvents_MPAttractionDelaySeconds,
 }
 
+option DynamicHordeEvents.EnableMPActiveSpawnClamp
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableMPActiveSpawnClamp,
+}
+
+option DynamicHordeEvents.MPActiveSpawnMaxRadius
+{
+    type = integer,
+    min = 30,
+    max = 250,
+    default = 75,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_MPActiveSpawnMaxRadius,
+}
+
 option DynamicHordeEvents.AvoidIndoorSpawn
 {
     type = boolean,
@@ -317,6 +335,24 @@ option DynamicHordeEvents.CataclysmAttractionVolume
     default = 800,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_CataclysmAttractionVolume,
+}
+
+option DynamicHordeEvents.EnableCataclysmPursuit
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_EnableCataclysmPursuit,
+}
+
+option DynamicHordeEvents.CataclysmPursuitHours
+{
+    type = double,
+    min = 0.25,
+    max = 24.0,
+    default = 4.0,
+    page = DynamicHordeEvents,
+    translation = DynamicHordeEvents_CataclysmPursuitHours,
 }
 
 option DynamicHordeEvents.EnableCataclysmWeather
