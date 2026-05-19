@@ -1016,6 +1016,7 @@ local function spawnZombieAt(x, y, z)
     local lastErr = nil
     local spawnMode = nil
     local spawnedZombies = {}
+    local mpServer = serverRuntimeActive()
 
     local variants = {
         {
@@ -1036,22 +1037,25 @@ local function spawnZombieAt(x, y, z)
                 return VirtualZombieManager.instance:createRealZombie(x + 0.5, y + 0.5, z)
             end,
         },
-        {
+    }
+
+    if not mpServer then
+        table.insert(variants, {
             mode = "createZombie",
             fn = function()
                 if type(createZombie) ~= "function" then return nil end
                 return createZombie(x, y, z, nil, 0, IsoDirections.S)
             end,
-        },
-        {
+        })
+        table.insert(variants, {
             mode = "outfit",
             fn = function() return addZombiesInOutfit(x, y, z, 1, nil, nil) end,
-        },
-        {
+        })
+        table.insert(variants, {
             mode = "outfit-dir",
             fn = function() return addZombiesInOutfit(x, y, z, 1, nil, 0) end,
-        },
-    }
+        })
+    end
 
     for _, variant in ipairs(variants) do
         local ok, result = pcall(variant.fn)
@@ -1064,6 +1068,10 @@ local function spawnZombieAt(x, y, z)
         else
             lastErr = ok and (tostring(variant.mode) .. " returned no zombie") or result
         end
+    end
+
+    if mpServer and not success then
+        lastErr = tostring(lastErr or "no MP-safe zombie spawn") .. "; skipped createZombie/addZombiesInOutfit MP fallbacks to avoid client-only invisible zombies"
     end
 
     return success, lastErr, spawnMode, spawnedZombies

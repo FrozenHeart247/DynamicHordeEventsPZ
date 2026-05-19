@@ -215,7 +215,7 @@ option DynamicHordeEvents.MPActiveSpawnMaxRadius
     type = integer,
     min = 30,
     max = 250,
-    default = 75,
+    default = 70,
     page = DynamicHordeEvents,
     translation = DynamicHordeEvents_MPActiveSpawnMaxRadius,
 }
