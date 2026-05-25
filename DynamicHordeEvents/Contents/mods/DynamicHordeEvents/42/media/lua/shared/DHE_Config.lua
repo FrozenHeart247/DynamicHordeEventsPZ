@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.6-mp-safe-spawn"
+DynamicHordeEvents.Version = "0.9.8-mp-outdoor-spawn"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,

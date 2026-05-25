@@ -169,18 +169,64 @@ local function applyMPActiveSpawnClamp(minRadius, maxRadius)
     return minRadius, maxRadius
 end
 
-local function squareIsUsable(square)
+local function squareIsSafehouse(square)
+    if not square or not SafeHouse or not SafeHouse.getSafeHouse then return false end
+
+    local safehouse = nil
+    pcall(function()
+        safehouse = SafeHouse.getSafeHouse(square)
+    end)
+    return safehouse ~= nil
+end
+
+local function squareIsWater(square)
     if not square then return false end
+
+    local water = false
+    pcall(function() water = square:isWater() end)
+    if not water and IsoFlagType and IsoFlagType.water then
+        pcall(function()
+            local props = square:getProperties()
+            water = props and props:Is(IsoFlagType.water)
+        end)
+    end
+    return water == true
+end
+
+local function squareIsUsable(square, allowIndoorFallback)
+    if not square then return false end
+
+    local safeToSpawn = true
+    pcall(function() safeToSpawn = square:isSafeToSpawn() end)
+    if safeToSpawn == false then return false end
+
     local solid = false
     pcall(function() solid = square:isSolid() end)
     if solid then return false end
     pcall(function() solid = square:isSolidTrans() end)
     if solid then return false end
-    if DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
+
+    if squareIsWater(square) then return false end
+    if squareIsSafehouse(square) then return false end
+
+    if DynamicHordeEvents.GetBool("AvoidIndoorSpawn") and not allowIndoorFallback then
+        local outside = true
+        local checkedOutside = false
+        pcall(function()
+            outside = square:isOutside()
+            checkedOutside = true
+        end)
+        if checkedOutside and not outside then return false end
+
         local room = nil
         pcall(function() room = square:getRoom() end)
         if room then return false end
+
+        local building = nil
+        pcall(function() building = square:getBuilding() end)
+        if building then return false end
     end
+
     return true
 end
 
@@ -261,10 +307,8 @@ local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
                 local square = getCell():getGridSquare(x, y, z)
                 if square then
                     if squareIsUsable(square) then return square end
-                    if not strictOutdoor then
-                        local solid = false
-                        pcall(function() solid = square:isSolid() end)
-                        if not solid then return square end
+                    if not strictOutdoor and not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
+                        if squareIsUsable(square, true) then return square end
                     end
                 end
             end
@@ -293,9 +337,11 @@ local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
     square = tryRandomRing(35, math.max(60, math.floor(minRadius / 2)), attempts, true)
     if square then return square end
 
-    -- 4) last resort: allow non-solid indoor/covered squares, otherwise the whole event dies.
-    square = tryRandomRing(20, math.max(40, math.floor(minRadius / 3)), attempts, false)
-    if square then return square end
+    -- 4) optional last resort for servers that explicitly allow indoor spawning.
+    if not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
+        square = tryRandomRing(20, math.max(40, math.floor(minRadius / 3)), attempts, false)
+        if square then return square end
+    end
 
     return nil
 end
@@ -313,12 +359,9 @@ local function findNearbySpawnableSquare(x, y, z, spread)
         if squareIsUsable(square) then return square end
     end
 
-    -- fallback for indoor/covered loaded cells: non-solid is better than spawning nothing.
-    square = getCell():getGridSquare(x, y, z)
-    if square then
-        local solid = false
-        pcall(function() solid = square:isSolid() end)
-        if not solid then return square end
+    if not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
+        square = getCell():getGridSquare(x, y, z)
+        if squareIsUsable(square, true) then return square end
     end
 
     return nil
@@ -337,16 +380,12 @@ local function findUsableSquareNearPoint(x, y, z, spread, allowIndoorFallback)
         if squareIsUsable(square) then return square end
     end
 
-    if allowIndoorFallback then
+    if allowIndoorFallback and not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
         for _ = 1, 20 do
             local ox = math.floor(x + ZombRand(-spread, spread + 1))
             local oy = math.floor(y + ZombRand(-spread, spread + 1))
             square = getCell():getGridSquare(ox, oy, z)
-            if square then
-                local solid = false
-                pcall(function() solid = square:isSolid() end)
-                if not solid then return square end
-            end
+            if squareIsUsable(square, true) then return square end
         end
     end
 
@@ -1018,8 +1057,25 @@ local function spawnZombieAt(x, y, z)
     local spawnedZombies = {}
     local mpServer = serverRuntimeActive()
 
-    local variants = {
-        {
+    local variants = {}
+
+    if mpServer then
+        table.insert(variants, {
+            mode = "outfit-server",
+            fn = function()
+                if type(addZombiesInOutfit) ~= "function" then return nil end
+                return addZombiesInOutfit(x, y, z, 1, nil, 50, false, false, false, false, false, false, 1.0)
+            end,
+        })
+        table.insert(variants, {
+            mode = "outfit-server-basic",
+            fn = function()
+                if type(addZombiesInOutfit) ~= "function" then return nil end
+                return addZombiesInOutfit(x, y, z, 1, nil, nil)
+            end,
+        })
+    else
+        table.insert(variants, {
             mode = "vzm-now",
             fn = function()
                 if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombieNow) then
@@ -1027,8 +1083,8 @@ local function spawnZombieAt(x, y, z)
                 end
                 return VirtualZombieManager.instance:createRealZombieNow(x + 0.5, y + 0.5, z)
             end,
-        },
-        {
+        })
+        table.insert(variants, {
             mode = "vzm-real",
             fn = function()
                 if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombie) then
@@ -1036,10 +1092,7 @@ local function spawnZombieAt(x, y, z)
                 end
                 return VirtualZombieManager.instance:createRealZombie(x + 0.5, y + 0.5, z)
             end,
-        },
-    }
-
-    if not mpServer then
+        })
         table.insert(variants, {
             mode = "createZombie",
             fn = function()
@@ -1049,11 +1102,17 @@ local function spawnZombieAt(x, y, z)
         })
         table.insert(variants, {
             mode = "outfit",
-            fn = function() return addZombiesInOutfit(x, y, z, 1, nil, nil) end,
+            fn = function()
+                if type(addZombiesInOutfit) ~= "function" then return nil end
+                return addZombiesInOutfit(x, y, z, 1, nil, nil)
+            end,
         })
         table.insert(variants, {
             mode = "outfit-dir",
-            fn = function() return addZombiesInOutfit(x, y, z, 1, nil, 0) end,
+            fn = function()
+                if type(addZombiesInOutfit) ~= "function" then return nil end
+                return addZombiesInOutfit(x, y, z, 1, nil, 0)
+            end,
         })
     end
 
@@ -1071,7 +1130,7 @@ local function spawnZombieAt(x, y, z)
     end
 
     if mpServer and not success then
-        lastErr = tostring(lastErr or "no MP-safe zombie spawn") .. "; skipped createZombie/addZombiesInOutfit MP fallbacks to avoid client-only invisible zombies"
+        lastErr = tostring(lastErr or "no MP-safe zombie spawn") .. "; skipped VirtualZombieManager/createZombie MP paths to avoid client-only invisible zombies"
     end
 
     return success, lastErr, spawnMode, spawnedZombies
@@ -1082,6 +1141,7 @@ local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
     local lastErr = nil
     local firstMode = nil
     local spawnedZombies = {}
+    local missingSquareCount = 0
 
     for _ = 1, count do
         local ox = math.floor(centerX + ZombRand(-spread, spread + 1))
@@ -1096,7 +1156,13 @@ local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
             else
                 lastErr = err
             end
+        else
+            missingSquareCount = missingSquareCount + 1
         end
+    end
+
+    if spawned <= 0 and lastErr == nil and missingSquareCount > 0 then
+        lastErr = "no usable loaded outdoor/safe spawn square"
     end
 
     return spawned, lastErr, firstMode, spawnedZombies
@@ -1123,15 +1189,7 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
         sendDebug(player, "DHE: " .. tostring(label or "horde") .. " spawn API failed: " .. tostring(mode) .. " | " .. tostring(err))
     end
 
-    -- Keep behavior sound-driven: spawn real server-side zombies, then let one queued noise event attract them.
-    local spawned, manualErr, manualMode, spawnedZombies = spawnZombieClusterManual(centerX, centerY, z, count, spread)
-    if manualErr ~= nil then lastErr = manualErr end
-    if spawned > 0 then
-        return spawned, lastErr, "manual-" .. tostring(manualMode or "server"), spawnedZombies
-    end
-
-    -- Last resort only: if direct real-zombie spawning fails entirely, ask the population manager.
-    if serverRuntimeActive() and spawned <= 0 then
+    local function spawnWithServerPopulation()
         local hordeInAreaTo = globalCreateHordeInAreaTo or createHordeInAreaTo
         if type(hordeInAreaTo) == "function" then
             local ok, err = pcall(function()
@@ -1157,6 +1215,22 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
             if ok then return count, nil, "spawnHorde", nil end
             noteSpawnApiFailure("spawnHorde", err)
         end
+
+        return 0, lastErr, "none", nil
+    end
+
+    local spawned, manualErr, manualMode, spawnedZombies = spawnZombieClusterManual(centerX, centerY, z, count, spread)
+    if manualErr ~= nil then lastErr = manualErr end
+    if spawned > 0 then
+        local prefix = serverRuntimeActive() and "server-" or "manual-"
+        return spawned, lastErr, prefix .. tostring(manualMode or "server"), spawnedZombies
+    end
+
+    if serverRuntimeActive() then
+        if type(addZombiesInOutfit) == "function" then
+            return spawned, lastErr or "no usable MP spawn square", "none", spawnedZombies
+        end
+        return spawnWithServerPopulation()
     end
 
     return spawned, lastErr, "none", nil
@@ -1556,7 +1630,11 @@ local function spawnCataclysmHorde(player)
 
     local pursued, pursuitHours, pursuitEnabled, pursuitDelaySeconds = startCataclysmPursuit(player, cataclysmZombies)
     if pursuitEnabled then
-        sendDebug(player, "DHE: CATACLYSM pursuit queued for " .. tostring(pursued) .. "/" .. tostring(#cataclysmZombies) .. " zombie(s), starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
+        if serverRuntimeActive() and #cataclysmZombies == 0 and spawned > 0 then
+            sendDebug(player, "DHE: CATACLYSM direct pursuit uses MP server-population mode; client pursuit sync queued separately, starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
+        else
+            sendDebug(player, "DHE: CATACLYSM pursuit queued for " .. tostring(pursued) .. "/" .. tostring(#cataclysmZombies) .. " zombie(s), starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
+        end
     else
         sendDebug(player, "DHE: CATACLYSM pursuit disabled in sandbox")
     end
