@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.8-mp-outdoor-spawn"
+DynamicHordeEvents.Version = "0.9.13-water-check-fix"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,

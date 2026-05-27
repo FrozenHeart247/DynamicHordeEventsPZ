@@ -180,17 +180,13 @@ local function squareIsSafehouse(square)
 end
 
 local function squareIsWater(square)
-    if not square then return false end
+    if not square or not (IsoFlagType and IsoFlagType.water) then return false end
 
-    local water = false
-    pcall(function() water = square:isWater() end)
-    if not water and IsoFlagType and IsoFlagType.water then
-        pcall(function()
-            local props = square:getProperties()
-            water = props and props:Is(IsoFlagType.water)
-        end)
-    end
-    return water == true
+    local props = square:getProperties()
+    if props and props:has(IsoFlagType.water) then return true end
+
+    local floor = square:getFloor()
+    return floor ~= nil and floor:hasProperty(IsoFlagType.water)
 end
 
 local function squareIsUsable(square, allowIndoorFallback)
@@ -230,6 +226,43 @@ local function squareIsUsable(square, allowIndoorFallback)
     return true
 end
 
+local squareZCache = {}
+
+local function rememberSquareZ(square, z)
+    if square then
+        squareZCache[square] = math.floor(tonumber(z) or 0)
+    end
+    return square
+end
+
+local function getSquareZ(square, fallback)
+    local z = nil
+    if square then
+        if squareZCache[square] ~= nil then
+            return squareZCache[square]
+        end
+        local ok, result = pcall(function()
+            return square:getZ()
+        end)
+        if ok and result ~= nil then z = result end
+    end
+    return math.floor(tonumber(z) or tonumber(fallback) or 0)
+end
+
+local function getPlayerZ(player, square, fallback)
+    local z = nil
+    if player then
+        local ok, result = pcall(function()
+            return player:getZ()
+        end)
+        if ok and result ~= nil then z = result end
+    end
+    if z == nil and square then
+        z = getSquareZ(square, nil)
+    end
+    return math.floor(tonumber(z) or tonumber(fallback) or 0)
+end
+
 local function findSpawnSquare(player, forceNear)
     local playerSquare = player:getSquare()
     if not playerSquare then return nil end
@@ -250,7 +283,9 @@ local function findSpawnSquare(player, forceNear)
         clampedForMP = minRadius ~= originalMinRadius or maxRadius ~= originalMaxRadius
     end
 
-    local z = playerSquare:getZ()
+    -- MP hordes should be ground-level events. If the target player is upstairs,
+    -- using their Z can place the horde on roofs/upper building tiles near bases.
+    local z = multiplayerServerRuntimeActive() and 0 or getPlayerZ(player, playerSquare, 0)
 
     for _ = 1, attempts do
         local radius = randomBetween(minRadius, maxRadius)
@@ -258,7 +293,7 @@ local function findSpawnSquare(player, forceNear)
         local x = math.floor(playerSquare:getX() + math.cos(angle) * radius)
         local y = math.floor(playerSquare:getY() + math.sin(angle) * radius)
         local square = getCell():getGridSquare(x, y, z)
-        if squareIsUsable(square) then return square end
+        if squareIsUsable(square) then return rememberSquareZ(square, z) end
     end
 
     if clampedForMP then
@@ -271,7 +306,7 @@ local function findSpawnSquare(player, forceNear)
         for oy = -radius, radius do
             if math.abs(ox) + math.abs(oy) >= math.max(5, math.floor(radius / 2)) then
                 local square = getCell():getGridSquare(playerSquare:getX() + ox, playerSquare:getY() + oy, z)
-                if squareIsUsable(square) then return square end
+                if squareIsUsable(square) then return rememberSquareZ(square, z) end
             end
         end
     end
@@ -289,13 +324,18 @@ local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
 
     local px = playerSquare:getX()
     local py = playerSquare:getY()
-    local pz = playerSquare:getZ()
+    local pz = getPlayerZ(player, playerSquare, 0)
 
     -- B42 only exposes already-loaded grid squares here. A 140-240 tile cataclysm radius
     -- can easily point into unloaded chunks and return nil forever. Try the requested
     -- radius first, then progressively fall back to closer loaded rings.
-    local zCandidates = { pz }
-    if pz ~= 0 then table.insert(zCandidates, 0) end
+    local zCandidates = {}
+    if multiplayerServerRuntimeActive() then
+        table.insert(zCandidates, 0)
+    else
+        table.insert(zCandidates, pz)
+        if pz ~= 0 then table.insert(zCandidates, 0) end
+    end
 
     local function tryRandomRing(rMin, rMax, tryCount, strictOutdoor)
         for _, z in ipairs(zCandidates) do
@@ -306,9 +346,9 @@ local function findSpawnSquareCustom(player, minRadius, maxRadius, attempts)
                 local y = math.floor(py + math.sin(angle) * radius)
                 local square = getCell():getGridSquare(x, y, z)
                 if square then
-                    if squareIsUsable(square) then return square end
+                    if squareIsUsable(square) then return rememberSquareZ(square, z) end
                     if not strictOutdoor and not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
-                        if squareIsUsable(square, true) then return square end
+                        if squareIsUsable(square, true) then return rememberSquareZ(square, z) end
                     end
                 end
             end
@@ -350,18 +390,18 @@ local function findNearbySpawnableSquare(x, y, z, spread)
     spread = math.max(1, math.floor(tonumber(spread) or 1))
 
     local square = getCell():getGridSquare(x, y, z)
-    if squareIsUsable(square) then return square end
+    if squareIsUsable(square) then return rememberSquareZ(square, z) end
 
     for _ = 1, 8 do
         local ox = x + ZombRand(-spread, spread + 1)
         local oy = y + ZombRand(-spread, spread + 1)
         square = getCell():getGridSquare(ox, oy, z)
-        if squareIsUsable(square) then return square end
+        if squareIsUsable(square) then return rememberSquareZ(square, z) end
     end
 
     if not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
         square = getCell():getGridSquare(x, y, z)
-        if squareIsUsable(square, true) then return square end
+        if squareIsUsable(square, true) then return rememberSquareZ(square, z) end
     end
 
     return nil
@@ -371,13 +411,13 @@ local function findUsableSquareNearPoint(x, y, z, spread, allowIndoorFallback)
     spread = math.max(1, math.floor(tonumber(spread) or 1))
 
     local square = getCell():getGridSquare(math.floor(x), math.floor(y), z)
-    if squareIsUsable(square) then return square end
+    if squareIsUsable(square) then return rememberSquareZ(square, z) end
 
     for _ = 1, 40 do
         local ox = math.floor(x + ZombRand(-spread, spread + 1))
         local oy = math.floor(y + ZombRand(-spread, spread + 1))
         square = getCell():getGridSquare(ox, oy, z)
-        if squareIsUsable(square) then return square end
+        if squareIsUsable(square) then return rememberSquareZ(square, z) end
     end
 
     if allowIndoorFallback and not DynamicHordeEvents.GetBool("AvoidIndoorSpawn") then
@@ -385,7 +425,7 @@ local function findUsableSquareNearPoint(x, y, z, spread, allowIndoorFallback)
             local ox = math.floor(x + ZombRand(-spread, spread + 1))
             local oy = math.floor(y + ZombRand(-spread, spread + 1))
             square = getCell():getGridSquare(ox, oy, z)
-            if squareIsUsable(square, true) then return square end
+            if squareIsUsable(square, true) then return rememberSquareZ(square, z) end
         end
     end
 
@@ -398,6 +438,18 @@ local function serverRuntimeActive()
         active = isServer and isServer() == true
     end)
     return active
+end
+
+local function clientRuntimeActive()
+    local active = false
+    pcall(function()
+        active = isClient and isClient() == true
+    end)
+    return active
+end
+
+local function serverLogicAllowed()
+    return serverRuntimeActive() or not clientRuntimeActive()
 end
 
 local function emitAttractionSound(player, x, y, z, radius, volume, label, quiet)
@@ -1005,8 +1057,6 @@ local function triggerCataclysmWeather(player)
     sendDebug(player, "DHE: cataclysm severe weather trigger attempted, durationHours=" .. tostring(duration))
 end
 
-local globalCreateHordeInAreaTo = createHordeInAreaTo
-local globalSpawnHorde = spawnHorde
 
 local function collectSpawnedZombies(result)
     local zombies = {}
@@ -1051,6 +1101,10 @@ local function appendZombies(target, source)
 end
 
 local function spawnZombieAt(x, y, z)
+    if not serverLogicAllowed() then
+        return false, "blocked client-side zombie spawn", "blocked-client", nil
+    end
+
     local success = false
     local lastErr = nil
     local spawnMode = nil
@@ -1148,7 +1202,7 @@ local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
         local oy = math.floor(centerY + ZombRand(-spread, spread + 1))
         local square = findNearbySpawnableSquare(ox, oy, z, spread)
         if square then
-            local ok, err, mode, zombies = spawnZombieAt(square:getX(), square:getY(), square:getZ())
+            local ok, err, mode, zombies = spawnZombieAt(square:getX(), square:getY(), getSquareZ(square, z))
             if ok then
                 spawned = spawned + 1
                 firstMode = firstMode or mode
@@ -1169,55 +1223,17 @@ local function spawnZombieClusterManual(centerX, centerY, z, count, spread)
 end
 
 local function spawnZombieCluster(player, centerX, centerY, z, count, spread, targetX, targetY, label)
+    if not serverLogicAllowed() then
+        return 0, "blocked client-side horde spawn", "blocked-client", nil
+    end
+
     count = math.max(0, math.floor(tonumber(count) or 0))
     if count <= 0 then return 0, nil, "none" end
 
     spread = math.max(1, math.floor(tonumber(spread) or 1))
     z = math.floor(tonumber(z) or 0)
 
-    local x1 = math.floor(centerX - spread)
-    local y1 = math.floor(centerY - spread)
-    local width = math.max(1, spread * 2 + 1)
-    local height = width
-    local x2 = x1 + width - 1
-    local y2 = y1 + height - 1
-    local tx = math.floor(tonumber(targetX) or centerX)
-    local ty = math.floor(tonumber(targetY) or centerY)
     local lastErr = nil
-    local function noteSpawnApiFailure(mode, err)
-        lastErr = err
-        sendDebug(player, "DHE: " .. tostring(label or "horde") .. " spawn API failed: " .. tostring(mode) .. " | " .. tostring(err))
-    end
-
-    local function spawnWithServerPopulation()
-        local hordeInAreaTo = globalCreateHordeInAreaTo or createHordeInAreaTo
-        if type(hordeInAreaTo) == "function" then
-            local ok, err = pcall(function()
-                hordeInAreaTo(x1, y1, width, height, tx, ty, count)
-            end)
-            if ok then return count, nil, "createHordeInAreaTo", nil end
-            noteSpawnApiFailure("createHordeInAreaTo", err)
-        end
-
-        if ZombiePopulationManager and ZombiePopulationManager.instance then
-            local ok, err = pcall(function()
-                ZombiePopulationManager.instance:createHordeInAreaTo(x1, y1, width, height, tx, ty, count)
-            end)
-            if ok then return count, nil, "ZombiePopulationManager:createHordeInAreaTo", nil end
-            noteSpawnApiFailure("ZombiePopulationManager:createHordeInAreaTo", err)
-        end
-
-        local hordeSpawn = globalSpawnHorde
-        if type(hordeSpawn) == "function" then
-            local ok, err = pcall(function()
-                hordeSpawn(x1, y1, x2, y2, z, count)
-            end)
-            if ok then return count, nil, "spawnHorde", nil end
-            noteSpawnApiFailure("spawnHorde", err)
-        end
-
-        return 0, lastErr, "none", nil
-    end
 
     local spawned, manualErr, manualMode, spawnedZombies = spawnZombieClusterManual(centerX, centerY, z, count, spread)
     if manualErr ~= nil then lastErr = manualErr end
@@ -1227,10 +1243,7 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
     end
 
     if serverRuntimeActive() then
-        if type(addZombiesInOutfit) == "function" then
-            return spawned, lastErr or "no usable MP spawn square", "none", spawnedZombies
-        end
-        return spawnWithServerPopulation()
+        return spawned, lastErr or "no usable MP server-owned spawn square", "none", spawnedZombies
     end
 
     return spawned, lastErr, "none", nil
@@ -1275,7 +1288,7 @@ spawnCataclysmCatchup = function(sync)
     local dirY = moveY / moveLen
     local baseX = math.floor(px - (dirX * CATACLYSM_CATCHUP_SPAWN_RADIUS))
     local baseY = math.floor(py - (dirY * CATACLYSM_CATCHUP_SPAWN_RADIUS))
-    local baseZ = math.floor(tonumber(pz) or tonumber(sync.z) or 0)
+    local baseZ = serverRuntimeActive() and 0 or math.floor(tonumber(pz) or tonumber(sync.z) or 0)
     local baseSquare = findUsableSquareNearPoint(baseX, baseY, baseZ, 18, true)
     if not baseSquare then
         sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_FAIL_RETRY_MS
@@ -1288,7 +1301,7 @@ spawnCataclysmCatchup = function(sync)
 
     local sx = baseSquare:getX()
     local sy = baseSquare:getY()
-    local sz = baseSquare:getZ()
+    local sz = getSquareZ(baseSquare, baseZ)
     local spawned, err, mode = spawnZombieCluster(
         sync.player,
         sx,
@@ -1401,7 +1414,7 @@ local function spawnHorde(player, forceNear, forceCount)
 
     local sx = spawnSquare:getX()
     local sy = spawnSquare:getY()
-    local sz = spawnSquare:getZ()
+    local sz = getSquareZ(spawnSquare, 0)
 
     local spawned, lastErr, spawnMode = spawnZombieCluster(
         player,
@@ -1441,7 +1454,7 @@ local function spawnWanderingHorde(player, forceCount)
 
     local px = playerSquare:getX()
     local py = playerSquare:getY()
-    local playerZ = playerSquare:getZ()
+    local playerZ = getPlayerZ(player, playerSquare, 0)
 
     -- Wandering hordes should be ground-level events. If the player is upstairs,
     -- using playerZ would try to find outdoor spawn squares on z=1, which often
@@ -1487,7 +1500,7 @@ local function spawnWanderingHorde(player, forceCount)
 
     sx = baseSquare:getX()
     sy = baseSquare:getY()
-    routeZ = baseSquare:getZ()
+    routeZ = getSquareZ(baseSquare, routeZ)
 
     local count = forceCount or randomBetween(
         DynamicHordeEvents.GetNumber("WanderingMinZombies"),
@@ -1581,7 +1594,7 @@ local function spawnCataclysmHorde(player)
 
     local sx = spawnSquare:getX()
     local sy = spawnSquare:getY()
-    local sz = spawnSquare:getZ()
+    local sz = getSquareZ(spawnSquare, 0)
 
     local playerSquare = player:getSquare()
     local px, py = player:getX(), player:getY()
@@ -1631,7 +1644,7 @@ local function spawnCataclysmHorde(player)
     local pursued, pursuitHours, pursuitEnabled, pursuitDelaySeconds = startCataclysmPursuit(player, cataclysmZombies)
     if pursuitEnabled then
         if serverRuntimeActive() and #cataclysmZombies == 0 and spawned > 0 then
-            sendDebug(player, "DHE: CATACLYSM direct pursuit uses MP server-population mode; client pursuit sync queued separately, starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
+            sendDebug(player, "DHE: CATACLYSM direct pursuit uses MP server-owned spawn mode; client pursuit sync queued separately, starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
         else
             sendDebug(player, "DHE: CATACLYSM pursuit queued for " .. tostring(pursued) .. "/" .. tostring(#cataclysmZombies) .. " zombie(s), starts in " .. tostring(pursuitDelaySeconds) .. " sec, duration=" .. tostring(pursuitHours) .. " game hour(s)")
         end
@@ -1669,6 +1682,7 @@ local function spawnCataclysmHorde(player)
 end
 
 function DynamicHordeEvents.Server.Update()
+    if not serverLogicAllowed() then return end
     if not DynamicHordeEvents.GetBool("Enabled") then return end
 
     if cataclysmWeatherAdminResetHour ~= nil and getGameTime and getGameTime():getWorldAgeHours() >= cataclysmWeatherAdminResetHour then
@@ -1720,6 +1734,7 @@ function DynamicHordeEvents.Server.Update()
 end
 
 function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args)
+    if not serverLogicAllowed() then return end
     if module ~= DynamicHordeEvents.CommandModule then return end
 
     if command == "TestSpawnNear" then
