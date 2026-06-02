@@ -4,8 +4,16 @@ option DynamicHordeEvents.Enabled
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_Enabled,
+}
+
+option DynamicHordeEvents.EnableNormalHorde
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_EnableNormalHorde,
 }
 
 option DynamicHordeEvents.MinSpawnHours
@@ -14,7 +22,7 @@ option DynamicHordeEvents.MinSpawnHours
     min = 1,
     max = 720,
     default = 12,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MinSpawnHours,
 }
 
@@ -24,7 +32,7 @@ option DynamicHordeEvents.MaxSpawnHours
     min = 1,
     max = 720,
     default = 48,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MaxSpawnHours,
 }
 
@@ -34,7 +42,7 @@ option DynamicHordeEvents.CooldownHours
     min = 0,
     max = 720,
     default = 0,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_CooldownHours,
 }
 
@@ -44,7 +52,7 @@ option DynamicHordeEvents.MinZombies
     min = 1,
     max = 500,
     default = 5,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MinZombies,
 }
 
@@ -54,7 +62,7 @@ option DynamicHordeEvents.MaxZombies
     min = 1,
     max = 500,
     default = 30,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MaxZombies,
 }
 
@@ -64,7 +72,7 @@ option DynamicHordeEvents.ScalingMode
     min = 1,
     max = 3,
     default = 2,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_ScalingMode,
 }
 
@@ -74,7 +82,7 @@ option DynamicHordeEvents.ScalingInterval
     min = 1,
     max = 365,
     default = 7,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_ScalingInterval,
 }
 
@@ -84,7 +92,7 @@ option DynamicHordeEvents.ScalingMultiplierPercent
     min = 0,
     max = 1000,
     default = 10,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_ScalingMultiplierPercent,
 }
 
@@ -94,7 +102,7 @@ option DynamicHordeEvents.ScalingMaxMultiplierPercent
     min = 100,
     max = 2000,
     default = 150,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_ScalingMaxMultiplierPercent,
 }
 
@@ -104,7 +112,7 @@ option DynamicHordeEvents.MinSpawnRadius
     min = 10,
     max = 500,
     default = 80,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MinSpawnRadius,
 }
 
@@ -114,7 +122,7 @@ option DynamicHordeEvents.MaxSpawnRadius
     min = 10,
     max = 500,
     default = 200,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_MaxSpawnRadius,
 }
 
@@ -122,7 +130,7 @@ option DynamicHordeEvents.DisableAtNight
 {
     type = boolean,
     default = false,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_DisableAtNight,
 }
 
@@ -132,7 +140,7 @@ option DynamicHordeEvents.NightStartHour
     min = 0,
     max = 23,
     default = 22,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_NightStartHour,
 }
 
@@ -142,7 +150,7 @@ option DynamicHordeEvents.NightEndHour
     min = 0,
     max = 23,
     default = 5,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_NightEndHour,
 }
 
@@ -150,7 +158,7 @@ option DynamicHordeEvents.EnableDirectionIndicator
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_EnableDirectionIndicator,
 }
 
@@ -160,7 +168,7 @@ option DynamicHordeEvents.IndicatorSeconds
     min = 5,
     max = 600,
     default = 20,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_IndicatorSeconds,
 }
 
@@ -168,7 +176,7 @@ option DynamicHordeEvents.EnableWarningSound
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_EnableWarningSound,
 }
 
@@ -178,7 +186,7 @@ option DynamicHordeEvents.AttractionRadius
     min = 10,
     max = 1000,
     default = 500,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_AttractionRadius,
 }
 
@@ -188,17 +196,32 @@ option DynamicHordeEvents.AttractionVolume
     min = 10,
     max = 1000,
     default = 500,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_AttractionVolume,
 }
 
+option DynamicHordeEvents.EnableNormalHordePursuit
+{
+    type = boolean,
+    default = false,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_EnableNormalHordePursuit,
+}
+
+option DynamicHordeEvents.EnableNormalHordePathAssist
+{
+    type = boolean,
+    default = false,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_EnableNormalHordePathAssist,
+}
 option DynamicHordeEvents.MPAttractionDelaySeconds
 {
     type = integer,
     min = 1,
     max = 30,
     default = 7,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_MP,
     translation = DynamicHordeEvents_MPAttractionDelaySeconds,
 }
 
@@ -206,7 +229,7 @@ option DynamicHordeEvents.EnableMPActiveSpawnClamp
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_MP,
     translation = DynamicHordeEvents_EnableMPActiveSpawnClamp,
 }
 
@@ -216,7 +239,7 @@ option DynamicHordeEvents.MPActiveSpawnMaxRadius
     min = 30,
     max = 250,
     default = 70,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_MP,
     translation = DynamicHordeEvents_MPActiveSpawnMaxRadius,
 }
 
@@ -224,7 +247,7 @@ option DynamicHordeEvents.AvoidIndoorSpawn
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_MP,
     translation = DynamicHordeEvents_AvoidIndoorSpawn,
 }
 
@@ -234,7 +257,7 @@ option DynamicHordeEvents.SpawnSearchAttempts
     min = 1,
     max = 200,
     default = 64,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_MP,
     translation = DynamicHordeEvents_SpawnSearchAttempts,
 }
 
@@ -243,7 +266,7 @@ option DynamicHordeEvents.EnableCataclysmHorde
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmHorde,
 }
 
@@ -253,7 +276,7 @@ option DynamicHordeEvents.CataclysmMinDays
     min = 1,
     max = 3650,
     default = 90,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMinDays,
 }
 
@@ -263,7 +286,7 @@ option DynamicHordeEvents.CataclysmMaxDays
     min = 1,
     max = 3650,
     default = 120,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMaxDays,
 }
 
@@ -273,7 +296,7 @@ option DynamicHordeEvents.CataclysmMinZombies
     min = 1,
     max = 1000,
     default = 200,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMinZombies,
 }
 
@@ -283,7 +306,7 @@ option DynamicHordeEvents.CataclysmMaxZombies
     min = 1,
     max = 1000,
     default = 500,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMaxZombies,
 }
 
@@ -293,7 +316,7 @@ option DynamicHordeEvents.CataclysmMinSpawnRadius
     min = 10,
     max = 500,
     default = 140,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMinSpawnRadius,
 }
 
@@ -303,7 +326,7 @@ option DynamicHordeEvents.CataclysmMaxSpawnRadius
     min = 10,
     max = 500,
     default = 240,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmMaxSpawnRadius,
 }
 
@@ -313,7 +336,7 @@ option DynamicHordeEvents.CataclysmIndicatorSeconds
     min = 1,
     max = 600,
     default = 25,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmIndicatorSeconds,
 }
 
@@ -323,7 +346,7 @@ option DynamicHordeEvents.CataclysmAttractionRadius
     min = 10,
     max = 2000,
     default = 800,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmAttractionRadius,
 }
 
@@ -333,7 +356,7 @@ option DynamicHordeEvents.CataclysmAttractionVolume
     min = 10,
     max = 2000,
     default = 800,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmAttractionVolume,
 }
 
@@ -341,7 +364,7 @@ option DynamicHordeEvents.EnableCataclysmPursuit
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmPursuit,
 }
 
@@ -351,7 +374,7 @@ option DynamicHordeEvents.CataclysmPursuitHours
     min = 0.25,
     max = 24.0,
     default = 4.0,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmPursuitHours,
 }
 
@@ -359,7 +382,7 @@ option DynamicHordeEvents.EnableCataclysmWeather
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmWeather,
 }
 
@@ -370,7 +393,7 @@ option DynamicHordeEvents.CataclysmWeatherDurationHours
     min = 1,
     max = 72,
     default = 8,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmWeatherDurationHours,
 }
 
@@ -378,7 +401,7 @@ option DynamicHordeEvents.EnableCataclysmFogWind
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmFogWind,
 }
 
@@ -388,7 +411,7 @@ option DynamicHordeEvents.CataclysmFogIntensity
     min = 0.0,
     max = 1.0,
     default = 1.0,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmFogIntensity,
 }
 
@@ -398,7 +421,7 @@ option DynamicHordeEvents.CataclysmWindIntensity
     min = 0.0,
     max = 1.0,
     default = 0.75,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmWindIntensity,
 }
 
@@ -408,7 +431,7 @@ option DynamicHordeEvents.CataclysmCloudIntensity
     min = 0.0,
     max = 1.0,
     default = 1.0,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmCloudIntensity,
 }
 
@@ -418,7 +441,7 @@ option DynamicHordeEvents.CataclysmDesaturation
     min = 0.0,
     max = 1.0,
     default = 0.45,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmDesaturation,
 }
 
@@ -426,7 +449,7 @@ option DynamicHordeEvents.EnableCataclysmScreenEffect
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmScreenEffect,
 }
 
@@ -436,7 +459,7 @@ option DynamicHordeEvents.CataclysmScreenEffectSeconds
     min = 0,
     max = 120,
     default = 15,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_CataclysmScreenEffectSeconds,
 }
 
@@ -444,7 +467,7 @@ option DynamicHordeEvents.EnableNormalHordeSpeech
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_EnableNormalHordeSpeech,
 }
 
@@ -452,7 +475,7 @@ option DynamicHordeEvents.EnableCataclysmHordeSpeech
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmHordeSpeech,
 }
 
@@ -461,7 +484,7 @@ option DynamicHordeEvents.EnableWanderingHorde
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_EnableWanderingHorde,
 }
 
@@ -471,7 +494,7 @@ option DynamicHordeEvents.WanderingMinHours
     min = 1,
     max = 720,
     default = 48,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMinHours,
 }
 
@@ -481,7 +504,7 @@ option DynamicHordeEvents.WanderingMaxHours
     min = 1,
     max = 720,
     default = 120,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMaxHours,
 }
 
@@ -491,7 +514,7 @@ option DynamicHordeEvents.WanderingMinZombies
     min = 1,
     max = 1000,
     default = 40,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMinZombies,
 }
 
@@ -501,7 +524,7 @@ option DynamicHordeEvents.WanderingMaxZombies
     min = 1,
     max = 1000,
     default = 120,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMaxZombies,
 }
 
@@ -511,7 +534,7 @@ option DynamicHordeEvents.WanderingMinSpawnRadius
     min = 10,
     max = 500,
     default = 140,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMinSpawnRadius,
 }
 
@@ -521,7 +544,7 @@ option DynamicHordeEvents.WanderingMaxSpawnRadius
     min = 10,
     max = 500,
     default = 220,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingMaxSpawnRadius,
 }
 
@@ -531,7 +554,7 @@ option DynamicHordeEvents.WanderingExitDistance
     min = 50,
     max = 800,
     default = 300,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingExitDistance,
 }
 
@@ -541,7 +564,7 @@ option DynamicHordeEvents.WanderingSpread
     min = 4,
     max = 120,
     default = 18,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingSpread,
 }
 
@@ -551,7 +574,7 @@ option DynamicHordeEvents.WanderingIndicatorSeconds
     min = 5,
     max = 600,
     default = 35,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingIndicatorSeconds,
 }
 
@@ -561,7 +584,7 @@ option DynamicHordeEvents.WanderingAttractionRadius
     min = 10,
     max = 2000,
     default = 900,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingAttractionRadius,
 }
 
@@ -571,7 +594,7 @@ option DynamicHordeEvents.WanderingAttractionVolume
     min = 10,
     max = 2000,
     default = 900,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_WanderingAttractionVolume,
 }
 
@@ -579,7 +602,7 @@ option DynamicHordeEvents.EnableWanderingHordeSpeech
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_EnableWanderingHordeSpeech,
 }
 
@@ -587,7 +610,7 @@ option DynamicHordeEvents.Debug
 {
     type = boolean,
     default = false,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_DebugPage,
     translation = DynamicHordeEvents_Debug,
 }
 
@@ -595,7 +618,7 @@ option DynamicHordeEvents.EnableDebugContextMenu
 {
     type = boolean,
     default = false,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_DebugPage,
     translation = DynamicHordeEvents_EnableDebugContextMenu,
 }
 
@@ -603,7 +626,7 @@ option DynamicHordeEvents.EnableDebugHotkey
 {
     type = boolean,
     default = false,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_DebugPage,
     translation = DynamicHordeEvents_EnableDebugHotkey,
 }
 
@@ -613,7 +636,7 @@ option DynamicHordeEvents.TestSpawnRadius
     min = 5,
     max = 100,
     default = 25,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_DebugPage,
     translation = DynamicHordeEvents_TestSpawnRadius,
 }
 
@@ -623,6 +646,6 @@ option DynamicHordeEvents.TestZombieCount
     min = 1,
     max = 100,
     default = 10,
-    page = DynamicHordeEvents,
+    page = DynamicHordeEvents_DebugPage,
     translation = DynamicHordeEvents_TestZombieCount,
 }

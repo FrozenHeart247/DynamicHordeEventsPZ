@@ -179,16 +179,47 @@ local function squareIsSafehouse(square)
     return safehouse ~= nil
 end
 
+local function propertiesHaveFlag(props, flag)
+    if not props or not flag or not props.has then return false end
+    return props:has(flag) == true
+end
+
+local function squareHasFlag(square, flag)
+    if not square or not flag or not square.has then return false end
+    return square:has(flag) == true
+end
+
+local function isoObjectHasFlag(object, flag)
+    if not object or not flag then return false end
+
+    if object.hasProperty and object:hasProperty(flag) then return true end
+
+    local props = nil
+    if object.getProperties then props = object:getProperties() end
+    if propertiesHaveFlag(props, flag) then return true end
+
+    local sprite = nil
+    if object.getSprite then sprite = object:getSprite() end
+    if sprite and sprite.getProperties then
+        return propertiesHaveFlag(sprite:getProperties(), flag)
+    end
+
+    return false
+end
+
 local function squareIsWater(square)
     if not square or not (IsoFlagType and IsoFlagType.water) then return false end
 
-    local props = square:getProperties()
-    if props and props:has(IsoFlagType.water) then return true end
+    if squareHasFlag(square, IsoFlagType.water) then return true end
 
-    local floor = square:getFloor()
-    return floor ~= nil and floor:hasProperty(IsoFlagType.water)
+    local props = nil
+    if square.getProperties then props = square:getProperties() end
+    if propertiesHaveFlag(props, IsoFlagType.water) then return true end
+
+    local floor = nil
+    if square.getFloor then floor = square:getFloor() end
+    return isoObjectHasFlag(floor, IsoFlagType.water)
 end
-
 local function squareIsUsable(square, allowIndoorFallback)
     if not square then return false end
 
@@ -518,7 +549,11 @@ local function emitAttractionSound(player, x, y, z, radius, volume, label, quiet
 end
 
 local pendingAttractionSounds = {}
+local pendingNormalHordeTargets = {}
 local ATTRACTION_SOUND_DELAY_TICKS_SP = 8
+local NORMAL_HORDE_TARGET_REFRESH_TICKS = 30
+local NORMAL_HORDE_PATH_ASSIST_MS = 15000
+local NORMAL_HORDE_PATH_ASSIST_Z_MS = 6000
 
 local function getAttractionSoundDelay()
     if serverRuntimeActive() then
@@ -709,7 +744,7 @@ local function zombieIsDeadOrMissing(zombie)
     return ok and dead == true
 end
 
-local function commandCataclysmZombieAtPlayer(zombie, player, forcePath)
+local function commandZombieAtPlayer(zombie, player, forcePath)
     if zombieIsDeadOrMissing(zombie) or playerIsDeadOrMissing(player) then return false end
 
     local applied = false
@@ -740,6 +775,127 @@ local function commandCataclysmZombieAtPlayer(zombie, player, forcePath)
     end
 
     return applied
+end
+
+local function getObjectZValue(object)
+    if not object then return nil end
+
+    local z = nil
+    pcall(function() z = object:getZ() end)
+    if z == nil then
+        pcall(function()
+            local square = object:getSquare()
+            if square then z = square:getZ() end
+        end)
+    end
+
+    z = tonumber(z)
+    if z == nil then return nil end
+    return math.floor(z + 0.5)
+end
+
+local function normalHordeHasVerticalMismatch(entry)
+    if not entry then return false end
+
+    local playerZ = getObjectZValue(entry.player)
+    if playerZ == nil then return false end
+
+    for _, zombie in ipairs(entry.zombies or {}) do
+        local zombieZ = getObjectZValue(zombie)
+        if zombieZ ~= nil and zombieZ ~= playerZ then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function shouldAssistNormalHordePath(entry)
+    if not DynamicHordeEvents.GetBool("EnableNormalHordePathAssist") then return false, false end
+
+    local ms = nowMs()
+    if ms < (entry.nextPathAtMs or 0) then return false, false end
+
+    local verticalMismatch = normalHordeHasVerticalMismatch(entry)
+    local interval = verticalMismatch and NORMAL_HORDE_PATH_ASSIST_Z_MS or NORMAL_HORDE_PATH_ASSIST_MS
+    entry.nextPathAtMs = ms + interval
+    return true, verticalMismatch
+end
+
+local function queueNormalHordePursuit(player, zombies)
+    if not DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then return 0 end
+    if not zombies or #zombies == 0 then
+        sendDebug(player, "DHE: normal direct target skipped: no spawned zombie references")
+        return 0
+    end
+
+    local delayTicks, delaySeconds = getAttractionSoundDelay()
+    table.insert(pendingNormalHordeTargets, {
+        player = player,
+        zombies = zombies,
+        ticks = delayTicks,
+        started = false,
+        nextPathAtMs = nowMs() + math.max(0, math.floor(((tonumber(delaySeconds) or 0) + 0.5) * 1000)),
+    })
+    local pathAssistText = DynamicHordeEvents.GetBool("EnableNormalHordePathAssist") and " pathAssist=on" or ""
+    sendDebug(player, "DHE: normal direct target tracking queued for " .. tostring(#zombies) .. " zombie(s) in " .. tostring(delaySeconds) .. " sec" .. pathAssistText)
+    return #zombies
+end
+
+local function refreshNormalHordeTarget(entry)
+    if not entry or playerIsDeadOrMissing(entry.player) then return 0, true, false, false end
+
+    local forcePath, verticalAssist = shouldAssistNormalHordePath(entry)
+    local aliveZombies = {}
+    local applied = 0
+    for _, zombie in ipairs(entry.zombies or {}) do
+        if not zombieIsDeadOrMissing(zombie) then
+            table.insert(aliveZombies, zombie)
+            if commandZombieAtPlayer(zombie, entry.player, forcePath) then
+                applied = applied + 1
+            end
+        end
+    end
+
+    entry.zombies = aliveZombies
+    return applied, #aliveZombies == 0, forcePath, verticalAssist
+end
+
+local function updateNormalHordePursuits()
+    if #pendingNormalHordeTargets == 0 then return end
+
+    local enabled = DynamicHordeEvents.GetBool("EnableNormalHordePursuit")
+    local startedCount = 0
+    local debugPlayer = nil
+    local i = 1
+    while i <= #pendingNormalHordeTargets do
+        local entry = pendingNormalHordeTargets[i]
+        if not enabled or playerIsDeadOrMissing(entry.player) then
+            table.remove(pendingNormalHordeTargets, i)
+        else
+            entry.ticks = (entry.ticks or 0) - 1
+            if entry.ticks <= 0 then
+                local applied, empty = refreshNormalHordeTarget(entry)
+                if empty then
+                    table.remove(pendingNormalHordeTargets, i)
+                else
+                    if not entry.started and applied > 0 then
+                        startedCount = startedCount + applied
+                        debugPlayer = debugPlayer or entry.player
+                    end
+                    entry.started = true
+                    entry.ticks = NORMAL_HORDE_TARGET_REFRESH_TICKS
+                    i = i + 1
+                end
+            else
+                i = i + 1
+            end
+        end
+    end
+
+    if startedCount > 0 then
+        sendDebug(debugPlayer, "DHE: normal direct target tracking started for " .. tostring(startedCount) .. " zombie(s)")
+    end
 end
 
 local function clearCataclysmZombieTarget(zombie, player)
@@ -798,7 +954,7 @@ local function updateCataclysmPursuit()
         elseif ms >= (entry.nextRefreshAtMs or 0) then
             local wasStarted = entry.started
             local forcePath = (not entry.started) or ms >= (entry.nextPathAtMs or 0)
-            commandCataclysmZombieAtPlayer(entry.zombie, entry.player, forcePath)
+            commandZombieAtPlayer(entry.zombie, entry.player, forcePath)
             entry.started = true
             if not wasStarted then
                 startedCount = startedCount + 1
@@ -1416,7 +1572,7 @@ local function spawnHorde(player, forceNear, forceCount)
     local sy = spawnSquare:getY()
     local sz = getSquareZ(spawnSquare, 0)
 
-    local spawned, lastErr, spawnMode = spawnZombieCluster(
+    local spawned, lastErr, spawnMode, spawnedZombies = spawnZombieCluster(
         player,
         sx,
         sy,
@@ -1428,6 +1584,7 @@ local function spawnHorde(player, forceNear, forceCount)
         "normal"
     )
 
+    local directTargeted = queueNormalHordePursuit(player, spawnedZombies)
     attractHordeToPlayer(player)
     notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
 
@@ -1437,6 +1594,9 @@ local function spawnHorde(player, forceNear, forceCount)
     local scalingText = ""
     if not forceNear and not forceCount and scalingMultiplier and scalingMultiplier > 1.0 then
         scalingText = " | scaled from " .. tostring(baseCount) .. " x" .. string.format("%.2f", scalingMultiplier) .. " after " .. string.format("%.1f", daysSurvived or 0) .. " days"
+    end
+    if DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then
+        scalingText = scalingText .. " | directTarget=" .. tostring(directTargeted or 0)
     end
     sendDebug(player, "DHE: spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " via=" .. tostring(spawnMode) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. scalingText)
     if spawned == 0 and lastErr then
@@ -1689,7 +1849,8 @@ function DynamicHordeEvents.Server.Update()
         resetCataclysmWeatherOverrides(nil)
     end
 
-    if nextSpawnHour == nil then
+    local normalHordeEnabled = DynamicHordeEvents.GetBool("EnableNormalHorde")
+    if normalHordeEnabled and nextSpawnHour == nil then
         scheduleNextSpawn(nil)
     end
     if nextCataclysmDay == nil and DynamicHordeEvents.GetBool("EnableCataclysmHorde") then
@@ -1715,6 +1876,8 @@ function DynamicHordeEvents.Server.Update()
             spawnWanderingHorde(wPlayer, nil)
         end
     end
+
+    if not normalHordeEnabled or nextSpawnHour == nil then return end
 
     if currentHour < nextSpawnHour then return end
 
@@ -1752,16 +1915,17 @@ function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args
     elseif command == "Status" then
         local currentHour = getGameTime():getWorldAgeHours()
         local multiplier, steps, daysSurvived = getHordeScalingMultiplier()
-        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay) .. ", nextWanderingHour=" .. tostring(nextWanderingHour))
+        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", normalEnabled=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHorde")) .. ", normalTargeting=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePursuit")) .. ", normalPathAssist=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePathAssist")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay) .. ", nextWanderingHour=" .. tostring(nextWanderingHour))
     end
 end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
 Events.OnTick.Add(updateAttractionSounds)
+Events.OnTick.Add(updateNormalHordePursuits)
 Events.OnTick.Add(updateCataclysmPursuit)
 Events.OnTick.Add(updateCataclysmPursuitSyncs)
 Events.OnGameStart.Add(function()
-    scheduleNextSpawn(nil)
+    if DynamicHordeEvents.GetBool("EnableNormalHorde") then scheduleNextSpawn(nil) end
     if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end
     if DynamicHordeEvents.GetBool("EnableWanderingHorde") then scheduleNextWandering(nil) end
 end)

@@ -4,10 +4,11 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.13-water-check-fix"
+DynamicHordeEvents.Version = "0.9.18-normal-path-assist"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
+    EnableNormalHorde = true,
     MinSpawnHours = 12,
     MaxSpawnHours = 48,
     CooldownHours = 0,
@@ -29,6 +30,8 @@ DynamicHordeEvents.Defaults = {
     FallbackWarningSound = "ZombieSurprisedPlayer",
     AttractionRadius = 500,
     AttractionVolume = 500,
+    EnableNormalHordePursuit = false,
+    EnableNormalHordePathAssist = false,
     MPAttractionDelaySeconds = 7,
     EnableMPActiveSpawnClamp = true,
     MPActiveSpawnMaxRadius = 75,
