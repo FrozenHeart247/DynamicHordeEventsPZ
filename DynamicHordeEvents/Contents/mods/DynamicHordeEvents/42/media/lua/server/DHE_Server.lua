@@ -550,10 +550,15 @@ end
 
 local pendingAttractionSounds = {}
 local pendingNormalHordeTargets = {}
+local pendingNormalHordeAcquisitions = {}
 local ATTRACTION_SOUND_DELAY_TICKS_SP = 8
 local NORMAL_HORDE_TARGET_REFRESH_TICKS = 30
 local NORMAL_HORDE_PATH_ASSIST_MS = 15000
 local NORMAL_HORDE_PATH_ASSIST_Z_MS = 6000
+local NORMAL_HORDE_ACQUIRE_RADIUS = 12
+local NORMAL_HORDE_ACQUIRE_FIRST_TICKS = 2
+local NORMAL_HORDE_ACQUIRE_RETRY_TICKS = 5
+local NORMAL_HORDE_ACQUIRE_EXTRA_ATTEMPTS = 4
 
 local function getAttractionSoundDelay()
     if serverRuntimeActive() then
@@ -618,6 +623,8 @@ end
 local cataclysmPursuitZombies = {}
 local cataclysmPursuitSyncs = {}
 local cataclysmPursuitSyncId = 0
+local normalPursuitSyncs = {}
+local normalPursuitSyncId = 0
 local spawnCataclysmCatchup = nil
 local CATACLYSM_PURSUIT_REFRESH_MS = 3000
 local CATACLYSM_PURSUIT_PATH_REFRESH_MS = 15000
@@ -629,6 +636,11 @@ local CATACLYSM_CATCHUP_FAIL_RETRY_MS = 5000
 local CATACLYSM_CATCHUP_SPAWN_RADIUS = 85
 local CATACLYSM_CATCHUP_BATCH_FRACTION = 0.25
 local CATACLYSM_CATCHUP_MAX_BATCH = 80
+local NORMAL_HORDE_PURSUIT_SYNC_MS = 3000
+local NORMAL_HORDE_PURSUIT_CLIENT_LIFE_MS = 7000
+local NORMAL_HORDE_PURSUIT_SYNC_HOURS = 1.0
+local NORMAL_HORDE_PURSUIT_MARGIN = 40
+local NORMAL_HORDE_PURSUIT_CAPTURE_RADIUS = 16
 
 local function getCataclysmPursuitHours()
     return math.max(0.25, DynamicHordeEvents.GetNumber("CataclysmPursuitHours"))
@@ -744,6 +756,72 @@ local function zombieIsDeadOrMissing(zombie)
     return ok and dead == true
 end
 
+local function sendNormalHordePursuitSync(sync)
+    if not sync or not sync.player then return 0 end
+
+    local targetX = sync.player:getX()
+    local targetY = sync.player:getY()
+    local targetZ = sync.player:getZ()
+    local payload = {
+        id = sync.id,
+        spawnX = sync.spawnX,
+        spawnY = sync.spawnY,
+        z = sync.z,
+        targetX = targetX,
+        targetY = targetY,
+        targetZ = targetZ,
+        margin = sync.margin,
+        count = sync.count,
+        captureRadius = NORMAL_HORDE_PURSUIT_CAPTURE_RADIUS,
+        clientLifeMs = NORMAL_HORDE_PURSUIT_CLIENT_LIFE_MS,
+        targetOnlineID = sync.targetOnlineID,
+        pathAssist = DynamicHordeEvents.GetBool("EnableNormalHordePathAssist"),
+    }
+
+    local sent = 0
+    local players = getPlayerList()
+    for _, recipient in ipairs(players) do
+        local ok = pcall(function()
+            sendServerCommand(recipient, DynamicHordeEvents.CommandModule, "NormalPursuitUpdate", payload)
+        end)
+        if ok then sent = sent + 1 end
+    end
+
+    if sent <= 0 and not serverRuntimeActive() then
+        pcall(function()
+            DynamicHordeEvents.PendingNormalPursuit = payload
+            sent = 1
+        end)
+    end
+
+    return sent
+end
+
+local function startNormalHordePursuitSync(player, spawnX, spawnY, z, count)
+    if not DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then return false end
+    if not serverRuntimeActive() then return false end
+    if playerIsDeadOrMissing(player) then return false end
+
+    count = math.max(0, math.floor(tonumber(count) or 0))
+    if count <= 0 then return false end
+
+    normalPursuitSyncId = normalPursuitSyncId + 1
+    table.insert(normalPursuitSyncs, {
+        id = normalPursuitSyncId,
+        player = player,
+        spawnX = spawnX,
+        spawnY = spawnY,
+        z = z,
+        count = count,
+        margin = NORMAL_HORDE_PURSUIT_MARGIN,
+        targetOnlineID = getPlayerOnlineId(player),
+        expiresAt = worldAgeHours() + NORMAL_HORDE_PURSUIT_SYNC_HOURS,
+        nextSyncAtMs = nowMs() + 500,
+        started = false,
+    })
+
+    return true
+end
 local function commandZombieAtPlayer(zombie, player, forcePath)
     if zombieIsDeadOrMissing(zombie) or playerIsDeadOrMissing(player) then return false end
 
@@ -822,14 +900,22 @@ local function shouldAssistNormalHordePath(entry)
     return true, verticalMismatch
 end
 
-local function queueNormalHordePursuit(player, zombies)
+local function queueNormalHordePursuit(player, zombies, delayTicksOverride, delaySecondsOverride, quiet)
     if not DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then return 0 end
     if not zombies or #zombies == 0 then
-        sendDebug(player, "DHE: normal direct target skipped: no spawned zombie references")
+        if not quiet then
+            sendDebug(player, "DHE: normal direct target skipped: no spawned zombie references")
+        end
         return 0
     end
 
     local delayTicks, delaySeconds = getAttractionSoundDelay()
+    if delayTicksOverride ~= nil then
+        delayTicks = math.max(0, math.floor(tonumber(delayTicksOverride) or 0))
+        delaySeconds = delaySecondsOverride
+        if delaySeconds == nil then delaySeconds = delayTicks / 10.0 end
+    end
+
     table.insert(pendingNormalHordeTargets, {
         player = player,
         zombies = zombies,
@@ -837,8 +923,10 @@ local function queueNormalHordePursuit(player, zombies)
         started = false,
         nextPathAtMs = nowMs() + math.max(0, math.floor(((tonumber(delaySeconds) or 0) + 0.5) * 1000)),
     })
-    local pathAssistText = DynamicHordeEvents.GetBool("EnableNormalHordePathAssist") and " pathAssist=on" or ""
-    sendDebug(player, "DHE: normal direct target tracking queued for " .. tostring(#zombies) .. " zombie(s) in " .. tostring(delaySeconds) .. " sec" .. pathAssistText)
+    if not quiet then
+        local pathAssistText = DynamicHordeEvents.GetBool("EnableNormalHordePathAssist") and " pathAssist=on" or ""
+        sendDebug(player, "DHE: normal direct target tracking queued for " .. tostring(#zombies) .. " zombie(s) in " .. tostring(delaySeconds) .. " sec" .. pathAssistText)
+    end
     return #zombies
 end
 
@@ -898,6 +986,31 @@ local function updateNormalHordePursuits()
     end
 end
 
+local function updateNormalHordePursuitSyncs()
+    if #normalPursuitSyncs == 0 then return end
+
+    local now = worldAgeHours()
+    local ms = nowMs()
+    local enabled = DynamicHordeEvents.GetBool("EnableNormalHordePursuit")
+    local i = 1
+    while i <= #normalPursuitSyncs do
+        local sync = normalPursuitSyncs[i]
+        if not enabled or now >= (sync.expiresAt or 0) or playerIsDeadOrMissing(sync.player) then
+            table.remove(normalPursuitSyncs, i)
+        elseif ms >= (sync.nextSyncAtMs or 0) then
+            local wasStarted = sync.started
+            local sent = sendNormalHordePursuitSync(sync)
+            sync.started = true
+            sync.nextSyncAtMs = ms + NORMAL_HORDE_PURSUIT_SYNC_MS
+            if not wasStarted then
+                sendDebug(sync.player, "DHE: normal client pursuit sync started for " .. tostring(sent) .. " client(s), duration=" .. tostring(NORMAL_HORDE_PURSUIT_SYNC_HOURS) .. " game hour(s)")
+            end
+            i = i + 1
+        else
+            i = i + 1
+        end
+    end
+end
 local function clearCataclysmZombieTarget(zombie, player)
     if not zombie then return end
 
@@ -1256,75 +1369,226 @@ local function appendZombies(target, source)
     end
 end
 
+local function buildObjectSet(objects)
+    local set = {}
+    for key, object in pairs(objects or {}) do
+        if type(key) == "number" then
+            if object then set[object] = true end
+        elseif object == true then
+            set[key] = true
+        elseif object then
+            set[object] = true
+        end
+    end
+    return set
+end
+
+local function objectIsZombie(object)
+    if not object then return false end
+    local ok, isZombie = pcall(function() return object:isZombie() end)
+    return ok and isZombie == true
+end
+
+local function collectNearbyZombies(x, y, z, radius, maxCount, exclude)
+    local zombies = {}
+    if not getCell then return zombies end
+
+    local cell = getCell()
+    if not cell then return zombies end
+
+    local excludeSet = buildObjectSet(exclude)
+    local seen = {}
+    local ix = math.floor(tonumber(x) or 0)
+    local iy = math.floor(tonumber(y) or 0)
+    local iz = math.floor(tonumber(z) or 0)
+    radius = math.max(0, math.floor(tonumber(radius) or 0))
+    maxCount = math.max(1, math.floor(tonumber(maxCount) or 1))
+
+    for dx = -radius, radius do
+        for dy = -radius, radius do
+            local square = nil
+            pcall(function() square = cell:getGridSquare(ix + dx, iy + dy, iz) end)
+            if square then
+                local moving = nil
+                pcall(function() moving = square:getMovingObjects() end)
+                local size = 0
+                pcall(function() size = moving and moving:size() or 0 end)
+                for i = 0, size - 1 do
+                    local object = nil
+                    pcall(function() object = moving:get(i) end)
+                    if object and not excludeSet[object] and not seen[object] and objectIsZombie(object) and not zombieIsDeadOrMissing(object) then
+                        table.insert(zombies, object)
+                        seen[object] = true
+                        if #zombies >= maxCount then return zombies end
+                    end
+                end
+            end
+        end
+    end
+
+    return zombies
+end
+
+local function addObjectsToSet(set, objects)
+    if not set then return end
+    for _, object in ipairs(objects or {}) do
+        if object then set[object] = true end
+    end
+end
+
+local function queueNormalHordePursuitAcquisition(player, x, y, z, expectedCount, exclude, alreadyTracked)
+    if not DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then return false end
+    if not serverRuntimeActive() then return false end
+    if playerIsDeadOrMissing(player) then return false end
+
+    expectedCount = math.max(0, math.floor(tonumber(expectedCount) or 0))
+    if expectedCount <= 0 then return false end
+
+    local trackedCount = #(alreadyTracked or {})
+    if trackedCount >= expectedCount then return false end
+
+    local delayTicks, delaySeconds = getAttractionSoundDelay()
+    local attempts = math.max(1, math.floor(delayTicks / NORMAL_HORDE_ACQUIRE_RETRY_TICKS) + NORMAL_HORDE_ACQUIRE_EXTRA_ATTEMPTS)
+    local known = buildObjectSet(exclude)
+    addObjectsToSet(known, alreadyTracked)
+
+    table.insert(pendingNormalHordeAcquisitions, {
+        player = player,
+        x = x,
+        y = y,
+        z = z,
+        radius = NORMAL_HORDE_ACQUIRE_RADIUS,
+        expected = expectedCount,
+        targeted = trackedCount,
+        known = known,
+        ticks = NORMAL_HORDE_ACQUIRE_FIRST_TICKS,
+        attempts = attempts,
+    })
+
+    sendDebug(player, "DHE: normal direct target early MP acquisition queued around " .. tostring(x) .. "," .. tostring(y) .. "," .. tostring(z) .. " missing=" .. tostring(expectedCount - trackedCount) .. " soundDelay=" .. tostring(delaySeconds) .. " sec")
+    return true
+end
+
+local function updateNormalHordeAcquisitions()
+    if #pendingNormalHordeAcquisitions == 0 then return end
+
+    local enabled = DynamicHordeEvents.GetBool("EnableNormalHordePursuit")
+    local i = 1
+    while i <= #pendingNormalHordeAcquisitions do
+        local entry = pendingNormalHordeAcquisitions[i]
+        if not enabled or playerIsDeadOrMissing(entry.player) then
+            table.remove(pendingNormalHordeAcquisitions, i)
+        else
+            entry.ticks = (entry.ticks or 0) - 1
+            if entry.ticks <= 0 then
+                local remaining = math.max(1, (tonumber(entry.expected) or 1) - (tonumber(entry.targeted) or 0))
+                local zombies = collectNearbyZombies(entry.x, entry.y, entry.z, entry.radius, remaining, entry.known)
+                if #zombies > 0 then
+                    addObjectsToSet(entry.known, zombies)
+                    local acquired = queueNormalHordePursuit(entry.player, zombies, 0, 0, true)
+                    entry.targeted = (entry.targeted or 0) + acquired
+                    sendDebug(entry.player, "DHE: normal direct target acquired " .. tostring(acquired) .. " early MP zombie ref(s), total=" .. tostring(entry.targeted) .. "/" .. tostring(entry.expected))
+                end
+
+                entry.attempts = (entry.attempts or 1) - 1
+                if (entry.targeted or 0) >= (entry.expected or 0) or entry.attempts <= 0 then
+                    if entry.attempts <= 0 and (entry.targeted or 0) < (entry.expected or 0) then
+                        sendDebug(entry.player, "DHE: normal direct target early MP acquisition ended, targeted=" .. tostring(entry.targeted or 0) .. "/" .. tostring(entry.expected or 0))
+                    end
+                    table.remove(pendingNormalHordeAcquisitions, i)
+                else
+                    entry.ticks = NORMAL_HORDE_ACQUIRE_RETRY_TICKS
+                    i = i + 1
+                end
+            else
+                i = i + 1
+            end
+        end
+    end
+end
 local function spawnZombieAt(x, y, z)
     if not serverLogicAllowed() then
         return false, "blocked client-side zombie spawn", "blocked-client", nil
+    end
+
+    local mpServer = serverRuntimeActive()
+
+    if mpServer then
+        if type(addZombiesInOutfit) ~= "function" then
+            return false, "addZombiesInOutfit unavailable", "server-outfit", nil
+        end
+
+        local beforeNearby = collectNearbyZombies(x, y, z, 2, 16, nil)
+        local ok, result = pcall(function()
+            return addZombiesInOutfit(x, y, z, 1, nil, 50, false, false, false, false, false, false, 1.0)
+        end)
+
+        if not ok then
+            return false, result, "server-outfit", nil
+        end
+
+        local spawnedZombies = collectSpawnedZombies(result)
+        local spawnMode = "server-outfit"
+        local lastErr = nil
+
+        if #spawnedZombies == 0 then
+            spawnedZombies = collectNearbyZombies(x, y, z, 2, 1, beforeNearby)
+            if #spawnedZombies > 0 then
+                spawnMode = "server-outfit-nearby-ref"
+            else
+                spawnMode = "server-outfit-fireforget"
+                lastErr = "server addZombiesInOutfit returned no refs; counted as success"
+            end
+        end
+
+        return true, lastErr, spawnMode, spawnedZombies
     end
 
     local success = false
     local lastErr = nil
     local spawnMode = nil
     local spawnedZombies = {}
-    local mpServer = serverRuntimeActive()
-
     local variants = {}
 
-    if mpServer then
-        table.insert(variants, {
-            mode = "outfit-server",
-            fn = function()
-                if type(addZombiesInOutfit) ~= "function" then return nil end
-                return addZombiesInOutfit(x, y, z, 1, nil, 50, false, false, false, false, false, false, 1.0)
-            end,
-        })
-        table.insert(variants, {
-            mode = "outfit-server-basic",
-            fn = function()
-                if type(addZombiesInOutfit) ~= "function" then return nil end
-                return addZombiesInOutfit(x, y, z, 1, nil, nil)
-            end,
-        })
-    else
-        table.insert(variants, {
-            mode = "vzm-now",
-            fn = function()
-                if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombieNow) then
-                    return nil
-                end
-                return VirtualZombieManager.instance:createRealZombieNow(x + 0.5, y + 0.5, z)
-            end,
-        })
-        table.insert(variants, {
-            mode = "vzm-real",
-            fn = function()
-                if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombie) then
-                    return nil
-                end
-                return VirtualZombieManager.instance:createRealZombie(x + 0.5, y + 0.5, z)
-            end,
-        })
-        table.insert(variants, {
-            mode = "createZombie",
-            fn = function()
-                if type(createZombie) ~= "function" then return nil end
-                return createZombie(x, y, z, nil, 0, IsoDirections.S)
-            end,
-        })
-        table.insert(variants, {
-            mode = "outfit",
-            fn = function()
-                if type(addZombiesInOutfit) ~= "function" then return nil end
-                return addZombiesInOutfit(x, y, z, 1, nil, nil)
-            end,
-        })
-        table.insert(variants, {
-            mode = "outfit-dir",
-            fn = function()
-                if type(addZombiesInOutfit) ~= "function" then return nil end
-                return addZombiesInOutfit(x, y, z, 1, nil, 0)
-            end,
-        })
-    end
+    table.insert(variants, {
+        mode = "vzm-now",
+        fn = function()
+            if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombieNow) then
+                return nil
+            end
+            return VirtualZombieManager.instance:createRealZombieNow(x + 0.5, y + 0.5, z)
+        end,
+    })
+    table.insert(variants, {
+        mode = "vzm-real",
+        fn = function()
+            if not (VirtualZombieManager and VirtualZombieManager.instance and VirtualZombieManager.instance.createRealZombie) then
+                return nil
+            end
+            return VirtualZombieManager.instance:createRealZombie(x + 0.5, y + 0.5, z)
+        end,
+    })
+    table.insert(variants, {
+        mode = "createZombie",
+        fn = function()
+            if type(createZombie) ~= "function" then return nil end
+            return createZombie(x, y, z, nil, 0, IsoDirections.S)
+        end,
+    })
+    table.insert(variants, {
+        mode = "outfit",
+        fn = function()
+            if type(addZombiesInOutfit) ~= "function" then return nil end
+            return addZombiesInOutfit(x, y, z, 1, nil, nil)
+        end,
+    })
+    table.insert(variants, {
+        mode = "outfit-dir",
+        fn = function()
+            if type(addZombiesInOutfit) ~= "function" then return nil end
+            return addZombiesInOutfit(x, y, z, 1, nil, 0)
+        end,
+    })
 
     for _, variant in ipairs(variants) do
         local ok, result = pcall(variant.fn)
@@ -1337,10 +1601,6 @@ local function spawnZombieAt(x, y, z)
         else
             lastErr = ok and (tostring(variant.mode) .. " returned no zombie") or result
         end
-    end
-
-    if mpServer and not success then
-        lastErr = tostring(lastErr or "no MP-safe zombie spawn") .. "; skipped VirtualZombieManager/createZombie MP paths to avoid client-only invisible zombies"
     end
 
     return success, lastErr, spawnMode, spawnedZombies
@@ -1394,8 +1654,15 @@ local function spawnZombieCluster(player, centerX, centerY, z, count, spread, ta
     local spawned, manualErr, manualMode, spawnedZombies = spawnZombieClusterManual(centerX, centerY, z, count, spread)
     if manualErr ~= nil then lastErr = manualErr end
     if spawned > 0 then
-        local prefix = serverRuntimeActive() and "server-" or "manual-"
-        return spawned, lastErr, prefix .. tostring(manualMode or "server"), spawnedZombies
+        local modeText = tostring(manualMode or "server")
+        if serverRuntimeActive() then
+            if string.sub(modeText, 1, 7) ~= "server-" then
+                modeText = "server-" .. modeText
+            end
+        else
+            modeText = "manual-" .. modeText
+        end
+        return spawned, lastErr, modeText, spawnedZombies
     end
 
     if serverRuntimeActive() then
@@ -1572,6 +1839,10 @@ local function spawnHorde(player, forceNear, forceCount)
     local sy = spawnSquare:getY()
     local sz = getSquareZ(spawnSquare, 0)
 
+    local normalPursuitBeforeZombies = nil
+    if DynamicHordeEvents.GetBool("EnableNormalHordePursuit") and serverRuntimeActive() then
+        normalPursuitBeforeZombies = collectNearbyZombies(sx, sy, sz, NORMAL_HORDE_ACQUIRE_RADIUS, math.max(64, math.min(512, count * 3)), nil)
+    end
     local spawned, lastErr, spawnMode, spawnedZombies = spawnZombieCluster(
         player,
         sx,
@@ -1584,7 +1855,18 @@ local function spawnHorde(player, forceNear, forceCount)
         "normal"
     )
 
-    local directTargeted = queueNormalHordePursuit(player, spawnedZombies)
+    local directTargeted = 0
+    if spawnedZombies and #spawnedZombies > 0 then
+        directTargeted = queueNormalHordePursuit(player, spawnedZombies)
+    elseif not serverRuntimeActive() then
+        directTargeted = queueNormalHordePursuit(player, spawnedZombies)
+    end
+    local clientPursuitSyncQueued = false
+    local delayedTargetQueued = false
+    if spawned > 0 then
+        clientPursuitSyncQueued = startNormalHordePursuitSync(player, sx, sy, sz, spawned)
+        delayedTargetQueued = queueNormalHordePursuitAcquisition(player, sx, sy, sz, spawned, normalPursuitBeforeZombies, spawnedZombies)
+    end
     attractHordeToPlayer(player)
     notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
 
@@ -1597,6 +1879,12 @@ local function spawnHorde(player, forceNear, forceCount)
     end
     if DynamicHordeEvents.GetBool("EnableNormalHordePursuit") then
         scalingText = scalingText .. " | directTarget=" .. tostring(directTargeted or 0)
+        if delayedTargetQueued then
+            scalingText = scalingText .. " delayedAcquire=early"
+        end
+        if clientPursuitSyncQueued then
+            scalingText = scalingText .. " clientSync=on"
+        end
     end
     sendDebug(player, "DHE: spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " via=" .. tostring(spawnMode) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. scalingText)
     if spawned == 0 and lastErr then
@@ -1921,7 +2209,9 @@ end
 
 Events.OnClientCommand.Add(DynamicHordeEvents.Server.OnClientCommand)
 Events.OnTick.Add(updateAttractionSounds)
+Events.OnTick.Add(updateNormalHordeAcquisitions)
 Events.OnTick.Add(updateNormalHordePursuits)
+Events.OnTick.Add(updateNormalHordePursuitSyncs)
 Events.OnTick.Add(updateCataclysmPursuit)
 Events.OnTick.Add(updateCataclysmPursuitSyncs)
 Events.OnGameStart.Add(function()

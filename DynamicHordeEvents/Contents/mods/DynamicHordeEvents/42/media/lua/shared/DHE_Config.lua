@@ -4,7 +4,7 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.18-normal-path-assist"
+DynamicHordeEvents.Version = "0.9.22-normal-lockon"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
