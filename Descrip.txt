@@ -1,0 +1,105 @@
+[h1]Dynamic Horde Events[/h1]
+
+Once the streets around a base are cleared, Project Zomboid can become very quiet. Dynamic Horde Events adds occasional horde encounters to bring some danger back to long-running worlds.
+
+Hordes can approach from outside the immediate area, pass close to your base, or actively hunt a chosen player. They do not run constantly, and every event type has its own sandbox settings.
+
+[h2]Horde types[/h2]
+[h3]Normal Horde[/h3]
+A group spawns outside the player's immediate area and is attracted toward the player's location by an event sound.
+
+Normal hordes can also use optional direct pursuit. With this enabled, only zombies created for that event keep tracking the selected player for about one in-game hour. Existing zombies in the world are not added to the pursuit group.
+
+[h3]Wandering Horde[/h3]
+
+A wandering horde travels across the area instead of attacking the player directly.
+
+It spawns on one side of the player and moves toward a point beyond them:
+
+[code]Spawn point  ->  Player area  ->  Exit point[/code]
+
+Stay quiet and it may pass without becoming your problem. Gunshots, vehicles, alarms, and other loud noises can still pull the horde off its route.
+
+[h3]Cataclysm Horde[/h3]
+
+A rare event intended for long-running worlds. Cataclysm hordes are much larger and can be configured to pursue their selected player directly for a limited number of in-game hours.
+
+If the player gets far enough away, the mod can spawn a limited catch-up group near the player. The original zombies are not deleted from the world, and catch-up stops when the pursuit event ends.
+
+Cataclysm events can also trigger temporary storm, rain, wind, fog, cloud, and desaturation effects. Every part of the weather effect can be adjusted or disabled.
+
+[h2]Scheduling[/h2]
+
+Each horde type has its own schedule and can be disabled separately.
+
+[list]
+[*][b]Random interval:[/b] the next event is rolled between the configured minimum and maximum time.
+[*][b]Fixed days and hour:[/b] run an event at a predictable interval, such as every day at 22:00 or every seven days at 18:00.
+[/list]
+
+[h2]Warnings and indicator[/h2]
+[img]https://i.postimg.cc/SNVCqd1y/Screenshot-2026-08-17-151117.png[/img]
+
+When an event starts, the mod can show a movable direction indicator with:
+[list]
+[*]event type
+[*]direction
+[*]distance
+[*]approximate zombie count
+[/list]
+
+Warning sounds, the direction indicator, survivor voice lines, and the Cataclysm screen effect can be disabled. The master notification option turns all player-facing warnings off while leaving the event itself active.
+
+[h2]Multiplayer[/h2]
+
+Horde events use a shared world schedule. When an event begins, one active player is selected as its target. 
+
+The optional MP spawn clamp keeps new hordes inside the active server area. For example, if a horde is configured to spawn 80-100 tiles away while the clamp is set to 70, the multiplayer spawn distance is capped at approximately 70 tiles.
+
+[h2]Sandbox settings[/h2]
+
+You can configure:
+[list]
+[*]event schedules and fixed event day/hours (7 Days To Die Mode)
+[*]horde sizes and spawn distances
+[*]normal horde scaling over survived days or months
+[*]direct pursuit and path assistance
+[*]wandering route distance and spread
+[*]Cataclysm pursuit duration and weather
+[*]warning sounds, speech, indicator duration, and notifications
+[*]indoor and multiplayer spawn restrictions
+[/list]
+
+Water tiles and active safehouses are avoided automatically when the mod searches for a spawn point.
+
+[h3]Normal Horde Pursuit[/h3]
+
+Disabled by default. When enabled, the spawned normal horde keeps receiving the selected player's current position instead of relying only on the initial attraction sound. Path assistance can help with buildings, upper floors, and obstacles, although zombie pathfinding is still controlled by the game.
+
+[h2]Performance[/h2]
+
+Very large hordes can be demanding, especially on multiplayer servers or in dense map areas. If performance drops, reduce the maximum horde size, Cataclysm size, attraction radius, or event frequency.
+
+[h2]Build and compatibility[/h2]
+
+✅Project Zomboid Build 42.20
+
+Should work with most maps, zombie variants, and gameplay mods. Mods that heavily replace zombie spawning, networking, or AI may affect horde behavior (Tested with Wandering Zombies and it works ok tho zombies may change course if they spawn too far away).
+
+It can be added to an existing save. New event timers are created the first time that world is loaded with the mod enabled.
+
+[h2]Recommended mods[/h2]
+
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=2749928925]CDDA Zombies[/url] adds more zombie variety to the hordes.
+
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3698715963]Cheval de Frise[/url] adds more options for defending a base against them.
+
+[h1]My Other Mods:[/h1]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3783989538]Project Parkour[/url]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3726328119]Extensive Health Rework Evolved[/url]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3774251699]Survival Planner List (TO DO List)[/url]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3739210444]Cut That Tree! (Tree Chopping Minigame)[/url]
+[url=https://steamcommunity.com/sharedfiles/filedetails/?id=3772642726]One Clean Jaw Stab[/url]
+
+
+

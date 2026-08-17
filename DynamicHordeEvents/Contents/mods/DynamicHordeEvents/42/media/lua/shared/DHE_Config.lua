@@ -4,26 +4,30 @@
 DynamicHordeEvents = DynamicHordeEvents or {}
 DynamicHordeEvents.ID = "DynamicHordeEventsB42"
 DynamicHordeEvents.CommandModule = "DynamicHordeEventsB42"
-DynamicHordeEvents.Version = "0.9.22-normal-lockon"
+DynamicHordeEvents.Version = "0.10.1-b42.20-indicator"
 
 DynamicHordeEvents.Defaults = {
     Enabled = true,
+    EnableEventNotifications = true,
     EnableNormalHorde = true,
+    NormalScheduleMode = 1, -- 1=random interval, 2=fixed days + hour
+    NormalFixedIntervalDays = 7,
+    NormalFixedHour = 22,
     MinSpawnHours = 12,
     MaxSpawnHours = 48,
     CooldownHours = 0,
     MinZombies = 5,
     MaxZombies = 30,
-    ScalingMode = 1, -- 1=Off, 2=Days survived, 3=Months survived
+    ScalingMode = 2, -- 1=Off, 2=Days survived, 3=Months survived
     ScalingInterval = 7, -- days or months depending on ScalingMode
-    ScalingMultiplierPercent = 25, -- added horde size per interval
-    ScalingMaxMultiplierPercent = 300, -- cap; 100=base size, 300=triple size
+    ScalingMultiplierPercent = 10, -- added horde size per interval
+    ScalingMaxMultiplierPercent = 150, -- cap; 100=base size, 150=1.5x size
     MinSpawnRadius = 80,
-    MaxSpawnRadius = 150,
+    MaxSpawnRadius = 200,
     DisableAtNight = false,
     NightStartHour = 22,
     NightEndHour = 5,
-    EnableDirectionIndicator = false,
+    EnableDirectionIndicator = true,
     IndicatorSeconds = 20,
     EnableWarningSound = true,
     WarningSound = "DynamicHordeWarning",
@@ -34,7 +38,7 @@ DynamicHordeEvents.Defaults = {
     EnableNormalHordePathAssist = false,
     MPAttractionDelaySeconds = 7,
     EnableMPActiveSpawnClamp = true,
-    MPActiveSpawnMaxRadius = 75,
+    MPActiveSpawnMaxRadius = 70,
     AvoidIndoorSpawn = true,
     SpawnSearchAttempts = 64,
     Debug = false,
@@ -45,13 +49,16 @@ DynamicHordeEvents.Defaults = {
 
     -- Rare ultra-hardcore event layer. Separate from normal horde scaling.
     EnableCataclysmHorde = true,
+    CataclysmScheduleMode = 1,
+    CataclysmFixedIntervalDays = 90,
+    CataclysmFixedHour = 22,
     CataclysmMinDays = 90,
     CataclysmMaxDays = 120,
-    CataclysmMinZombies = 150,
-    CataclysmMaxZombies = 300,
+    CataclysmMinZombies = 200,
+    CataclysmMaxZombies = 500,
     CataclysmMinSpawnRadius = 140,
     CataclysmMaxSpawnRadius = 240,
-    CataclysmIndicatorSeconds = 45,
+    CataclysmIndicatorSeconds = 25,
     CataclysmAttractionRadius = 800,
     CataclysmAttractionVolume = 800,
     EnableCataclysmPursuit = true,
@@ -59,8 +66,8 @@ DynamicHordeEvents.Defaults = {
     EnableCataclysmWeather = true,
     CataclysmWeatherDurationHours = 8,
     EnableCataclysmFogWind = true,
-    CataclysmFogIntensity = 0.75,
-    CataclysmWindIntensity = 1.0,
+    CataclysmFogIntensity = 1.0,
+    CataclysmWindIntensity = 0.75,
     CataclysmCloudIntensity = 1.0,
     CataclysmDesaturation = 0.45,
     EnableCataclysmScreenEffect = true,
@@ -68,8 +75,11 @@ DynamicHordeEvents.Defaults = {
 
     -- Wandering horde: passes through/near the player area instead of directly targeting the player.
     EnableWanderingHorde = true,
-    WanderingMinHours = 72,
-    WanderingMaxHours = 168,
+    WanderingScheduleMode = 1,
+    WanderingFixedIntervalDays = 1,
+    WanderingFixedHour = 22,
+    WanderingMinHours = 48,
+    WanderingMaxHours = 120,
     WanderingMinZombies = 40,
     WanderingMaxZombies = 120,
     WanderingMinSpawnRadius = 140,
@@ -106,6 +116,7 @@ end
 
 function DynamicHordeEvents.GetBool(key)
     local value = readSandboxValue(key)
+    if type(value) == "string" then value = string.lower(value) end
     return value == true or value == 1 or value == "true"
 end
 

@@ -24,42 +24,47 @@ end
 
 
 local NORMAL_HORDE_LINES = {
-    "Fuck... I hear a horde nearby. I think they're coming here.",
-    "Shit. That's not just wandering. They're heading this way!",
-    "Great. A whole damn crowd, and of course they found me.",
-    "I hear them. Too many footsteps... way too close.",
-    "I heard something over there. Should stay careful",
-    "Goddamn wanderers. Why can't you just die. Oh, right they're already dead.",
-    "Yeah fuckers! Come and get me!",
-    "Yeah I like company but not that sort of a company.",
-    "Hey... Isn't it... I.. I know that guy.... Gotta make a proper burials for him",
+    "IGUI_DHE_Speech_Normal_1",
+    "IGUI_DHE_Speech_Normal_2",
+    "IGUI_DHE_Speech_Normal_3",
+    "IGUI_DHE_Speech_Normal_4",
+    "IGUI_DHE_Speech_Normal_5",
+    "IGUI_DHE_Speech_Normal_6",
+    "IGUI_DHE_Speech_Normal_7",
+    "IGUI_DHE_Speech_Normal_8",
+    "IGUI_DHE_Speech_Normal_9",
 }
 
 local CATACLYSM_HORDE_LINES = {
-    "Fuck, fuck, fuck... I really don't like the sound of that.",
-    "Shit... sounds like the whole city is coming for my ass.",
-    "God damn it, why right now? Fight them or run?",
-    "No. No, that's not a horde. That's a fucking wall of dead.",
-    "Yeah, this sounds like trouble, grave trouble. Should've written a will earlier",
-    "Fuuuuuuck! Why can't you sit in one place?'. I'll need a good bottle of whiskey after that... If I survive",
+    "IGUI_DHE_Speech_Cataclysm_1",
+    "IGUI_DHE_Speech_Cataclysm_2",
+    "IGUI_DHE_Speech_Cataclysm_3",
+    "IGUI_DHE_Speech_Cataclysm_4",
+    "IGUI_DHE_Speech_Cataclysm_5",
+    "IGUI_DHE_Speech_Cataclysm_6",
 }
 
 local WANDERING_HORDE_LINES = {
-    "Hold on... that's a moving horde. Maybe I can stay quiet.",
-    "Shit. They're passing through. Don't make a sound.",
-    "That's a lot of dead on the move. Better let them pass.",
-    "Keep it quiet... maybe they won't notice me.",
-    "Hey! That's my neighborhood... Hope they wont stay long here. Better not provoke them.",
-    "Is there a parade or what? Dont feel like joining. Better stay quite.",
+    "IGUI_DHE_Speech_Wandering_1",
+    "IGUI_DHE_Speech_Wandering_2",
+    "IGUI_DHE_Speech_Wandering_3",
+    "IGUI_DHE_Speech_Wandering_4",
+    "IGUI_DHE_Speech_Wandering_5",
+    "IGUI_DHE_Speech_Wandering_6",
 }
 
 local function randomLine(lines)
     if not lines or #lines == 0 then return nil end
     local index = ZombRand(1, #lines + 1)
-    return lines[index]
+    local key = lines[index]
+    local translated = nil
+    pcall(function() translated = getText(key) end)
+    if translated == nil or translated == "" or translated == key then return nil end
+    return translated
 end
 
 function DynamicHordeEvents.Client.SayHordeLine(eventType)
+    if not DynamicHordeEvents.GetBool("EnableEventNotifications") then return end
     local player = getPlayer()
     if not player then return end
 
@@ -150,7 +155,10 @@ local function playOneSound(soundName)
     return false
 end
 
-function DynamicHordeEvents.Client.PlayWarningSound(eventType)
+function DynamicHordeEvents.Client.PlayWarningSound(eventType, forceForDebug)
+    if not forceForDebug and not DynamicHordeEvents.GetBool("EnableEventNotifications") then
+        return false
+    end
     if not DynamicHordeEvents.GetBool("EnableWarningSound") then
         DynamicHordeEvents.Client.ShowMessage("DHE: warning sound disabled in sandbox")
         return false
@@ -185,12 +193,19 @@ end
 
 function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
     args = args or {}
+    if args.debugOnly ~= true and not DynamicHordeEvents.GetBool("EnableEventNotifications") then
+        DynamicHordeEvents.DebugPrint("DHE: incoming player notification suppressed by sandbox")
+        return false
+    end
     local now = getTimestampMs()
-    local indicatorSeconds = DynamicHordeEvents.GetNumber("IndicatorSeconds")
-    if args.eventType == "cataclysm" then
-        indicatorSeconds = DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds")
-    elseif args.eventType == "wandering" then
-        indicatorSeconds = DynamicHordeEvents.GetNumber("WanderingIndicatorSeconds")
+    local indicatorSeconds = tonumber(args.indicatorSeconds)
+    if indicatorSeconds == nil then
+        indicatorSeconds = DynamicHordeEvents.GetNumber("IndicatorSeconds")
+        if args.eventType == "cataclysm" then
+            indicatorSeconds = DynamicHordeEvents.GetNumber("CataclysmIndicatorSeconds")
+        elseif args.eventType == "wandering" then
+            indicatorSeconds = DynamicHordeEvents.GetNumber("WanderingIndicatorSeconds")
+        end
     end
     local lifeMs = math.max(5000, indicatorSeconds * 1000)
     DynamicHordeEvents.Client.Target = {
@@ -205,8 +220,9 @@ function DynamicHordeEvents.Client.SetIncomingTarget(args, silent)
         screenEffectSeconds = tonumber(args.screenEffectSeconds) or 0,
     }
     if not args.debugOnly then DynamicHordeEvents.Client.QueueHordeLine(DynamicHordeEvents.Client.Target.eventType) end
-    if not silent then DynamicHordeEvents.Client.PlayWarningSound(DynamicHordeEvents.Client.Target.eventType) end
+    if not silent then DynamicHordeEvents.Client.PlayWarningSound(DynamicHordeEvents.Client.Target.eventType, args.debugOnly == true) end
     DynamicHordeEvents.Client.ShowMessage("DHE: target set, count=" .. tostring(DynamicHordeEvents.Client.Target.count))
+    return true
 end
 
 function DynamicHordeEvents.Client.TestUIOnly()
@@ -226,12 +242,12 @@ function DynamicHordeEvents.Client.TestUIOnly()
 end
 
 function DynamicHordeEvents.Client.TestSoundOnly()
-    DynamicHordeEvents.Client.PlayWarningSound()
+    DynamicHordeEvents.Client.PlayWarningSound(nil, true)
 end
 
 function DynamicHordeEvents.Client.TestIndicatorAndSound()
     DynamicHordeEvents.Client.TestUIOnly()
-    DynamicHordeEvents.Client.PlayWarningSound()
+    DynamicHordeEvents.Client.PlayWarningSound(nil, true)
     DynamicHordeEvents.Client.ShowMessage("DHE: UI + sound local test fired")
 end
 
@@ -255,7 +271,7 @@ end
 
 function DynamicHordeEvents.Client.TestCataclysmIndicatorAndSound()
     DynamicHordeEvents.Client.TestCataclysmUIOnly()
-    DynamicHordeEvents.Client.PlayWarningSound("cataclysm")
+    DynamicHordeEvents.Client.PlayWarningSound("cataclysm", true)
     DynamicHordeEvents.Client.ShowMessage("DHE: cataclysm UI + sound local test fired")
 end
 
@@ -280,7 +296,7 @@ end
 
 function DynamicHordeEvents.Client.TestWanderingIndicatorAndSound()
     DynamicHordeEvents.Client.TestWanderingUIOnly()
-    DynamicHordeEvents.Client.PlayWarningSound("wandering")
+    DynamicHordeEvents.Client.PlayWarningSound("wandering", true)
     DynamicHordeEvents.Client.ShowMessage("DHE: wandering UI + sound local test fired")
 end
 
@@ -332,7 +348,7 @@ local function zombieLooksValid(zombie)
     if not zombie then return false end
     local dead = false
     local ok = pcall(function() dead = zombie:isDead() end)
-    return (not ok) or dead ~= true
+    return ok and dead ~= true
 end
 
 local function zombieInsidePursuitArea(zombie, pursuit)
@@ -346,8 +362,11 @@ local function zombieInsidePursuitArea(zombie, pursuit)
     end)
     if not ok then return false end
 
-    local targetZ = tonumber(pursuit.targetZ) or tonumber(pursuit.z) or 0
-    if math.abs((tonumber(zz) or 0) - targetZ) > 0.6 then return false end
+    local spawnZ = tonumber(pursuit.z) or 0
+    local targetZ = tonumber(pursuit.targetZ) or spawnZ
+    local minZ = math.min(spawnZ, targetZ) - 0.6
+    local maxZ = math.max(spawnZ, targetZ) + 0.6
+    if (tonumber(zz) or 0) < minZ or (tonumber(zz) or 0) > maxZ then return false end
 
     local margin = math.max(40, tonumber(pursuit.margin) or 100)
     local minX = math.min(tonumber(pursuit.spawnX) or 0, tonumber(pursuit.targetX) or 0) - margin

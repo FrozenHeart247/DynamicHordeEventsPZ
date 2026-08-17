@@ -2,15 +2,11 @@
 -- Server-side event logic + sandbox-gated debug commands.
 
 require "DHE_Config"
+require "DHE_Scheduler"
 
 DynamicHordeEvents.Server = DynamicHordeEvents.Server or {}
+local Scheduler = DynamicHordeEvents.Scheduler
 
-local nextSpawnHour = nil
-local lastSpawnHour = -999999
-local nextCataclysmDay = nil
-local lastCataclysmDay = -999999
-local nextWanderingHour = nil
-local lastWanderingHour = -999999
 local cataclysmWeatherAdminResetHour = nil
 
 local function clampRange(minValue, maxValue)
@@ -83,33 +79,6 @@ local function isNightTime()
         return hour >= nightStart or hour <= nightEnd
     end
     return hour >= nightStart and hour <= nightEnd
-end
-
-local function scheduleNextSpawn(playerForDebug)
-    local minHours = DynamicHordeEvents.GetNumber("MinSpawnHours")
-    local maxHours = DynamicHordeEvents.GetNumber("MaxSpawnHours")
-    local delay = randomBetween(minHours, maxHours)
-
-    nextSpawnHour = getGameTime():getWorldAgeHours() + delay
-    sendDebug(playerForDebug, "DHE: next random horde in " .. tostring(delay) .. " hour(s). targetWorldHour=" .. tostring(nextSpawnHour))
-end
-
-local function scheduleNextCataclysm(playerForDebug)
-    local minDays = DynamicHordeEvents.GetNumber("CataclysmMinDays")
-    local maxDays = DynamicHordeEvents.GetNumber("CataclysmMaxDays")
-    local delay = randomBetween(minDays, maxDays)
-
-    nextCataclysmDay = getWorldDaysSurvived() + delay
-    sendDebug(playerForDebug, "DHE: next cataclysm horde in " .. tostring(delay) .. " day(s). targetWorldDay=" .. tostring(nextCataclysmDay))
-end
-
-local function scheduleNextWandering(playerForDebug)
-    local minHours = DynamicHordeEvents.GetNumber("WanderingMinHours")
-    local maxHours = DynamicHordeEvents.GetNumber("WanderingMaxHours")
-    local delay = randomBetween(minHours, maxHours)
-
-    nextWanderingHour = getGameTime():getWorldAgeHours() + delay
-    sendDebug(playerForDebug, "DHE: next wandering horde in " .. tostring(delay) .. " hour(s). targetWorldHour=" .. tostring(nextWanderingHour))
 end
 
 local function getPlayerList()
@@ -257,7 +226,7 @@ local function squareIsUsable(square, allowIndoorFallback)
     return true
 end
 
-local squareZCache = {}
+local squareZCache = setmetatable({}, { __mode = "k" })
 
 local function rememberSquareZ(square, z)
     if square then
@@ -634,6 +603,7 @@ local CATACLYSM_CATCHUP_DISTANCE = 85
 local CATACLYSM_CATCHUP_MIN_MS = 15000
 local CATACLYSM_CATCHUP_FAIL_RETRY_MS = 5000
 local CATACLYSM_CATCHUP_SPAWN_RADIUS = 85
+local CATACLYSM_CATCHUP_ACTIVE_MARGIN = 10
 local CATACLYSM_CATCHUP_BATCH_FRACTION = 0.25
 local CATACLYSM_CATCHUP_MAX_BATCH = 80
 local NORMAL_HORDE_PURSUIT_SYNC_MS = 3000
@@ -644,6 +614,15 @@ local NORMAL_HORDE_PURSUIT_CAPTURE_RADIUS = 16
 
 local function getCataclysmPursuitHours()
     return math.max(0.25, DynamicHordeEvents.GetNumber("CataclysmPursuitHours"))
+end
+
+local function getCataclysmCatchupSpawnRadius()
+    local radius = CATACLYSM_CATCHUP_SPAWN_RADIUS
+    if multiplayerServerRuntimeActive() and DynamicHordeEvents.GetBool("EnableMPActiveSpawnClamp") then
+        local activeMax = math.max(30, DynamicHordeEvents.GetNumber("MPActiveSpawnMaxRadius"))
+        radius = math.min(radius, math.max(20, activeMax - CATACLYSM_CATCHUP_ACTIVE_MARGIN))
+    end
+    return radius
 end
 
 local function worldAgeHours()
@@ -747,13 +726,41 @@ end
 local function playerIsDeadOrMissing(player)
     if not player then return true end
     local ok, dead = pcall(function() return player:isDead() end)
-    return ok and dead == true
+    if not ok or dead == true then return true end
+
+    if serverRuntimeActive() then
+        local checkedOnlinePlayers = false
+        local foundOnlinePlayer = false
+        local playerOnlineId = getPlayerOnlineId(player)
+        local okOnline = pcall(function()
+            local onlinePlayers = getOnlinePlayers()
+            if not onlinePlayers then return end
+
+            checkedOnlinePlayers = true
+            for i = 0, onlinePlayers:size() - 1 do
+                local onlinePlayer = onlinePlayers:get(i)
+                if onlinePlayer == player then
+                    foundOnlinePlayer = true
+                    return
+                end
+
+                local onlineId = getPlayerOnlineId(onlinePlayer)
+                if playerOnlineId ~= nil and onlineId ~= nil and tostring(onlineId) == tostring(playerOnlineId) then
+                    foundOnlinePlayer = true
+                    return
+                end
+            end
+        end)
+        if okOnline and checkedOnlinePlayers and not foundOnlinePlayer then return true end
+    end
+
+    return false
 end
 
 local function zombieIsDeadOrMissing(zombie)
     if not zombie then return true end
     local ok, dead = pcall(function() return zombie:isDead() end)
-    return ok and dead == true
+    return not ok or dead == true
 end
 
 local function sendNormalHordePursuitSync(sync)
@@ -1022,9 +1029,14 @@ local function clearCataclysmZombieTarget(zombie, player)
     pcall(function() zombie:clearAggroList() end)
 end
 
-local function startCataclysmPursuit(player, zombies)
+local function startCataclysmPursuit(player, zombies, startDelayMsOverride)
     local pursuitHours = getCataclysmPursuitHours()
-    local startDelayMs = getCataclysmPursuitStartDelayMs()
+    local startDelayMs = startDelayMsOverride
+    if startDelayMs == nil then
+        startDelayMs = getCataclysmPursuitStartDelayMs()
+    else
+        startDelayMs = math.max(0, tonumber(startDelayMs) or 0)
+    end
     if not DynamicHordeEvents.GetBool("EnableCataclysmPursuit") then return 0, pursuitHours, false, startDelayMs / 1000.0 end
     if not zombies or #zombies == 0 then return 0, pursuitHours, true, startDelayMs / 1000.0 end
 
@@ -1203,6 +1215,7 @@ local function resetCataclysmWeatherOverrides(player)
     end)
 
     cataclysmWeatherAdminResetHour = nil
+    Scheduler.SetMeta("cataclysmWeatherAdminResetHour", nil)
     sendDebug(player, "DHE: cataclysm fog/wind admin overrides reset.")
 end
 
@@ -1234,6 +1247,7 @@ local function applyCataclysmFogWindOverrides(player, cm, duration)
     if getGameTime then
         local currentHour = getGameTime():getWorldAgeHours()
         cataclysmWeatherAdminResetHour = currentHour + math.max(1, duration)
+        Scheduler.SetMeta("cataclysmWeatherAdminResetHour", cataclysmWeatherAdminResetHour)
         sendDebug(player, "DHE: cataclysm fog/wind override reset scheduled at worldHour=" .. tostring(cataclysmWeatherAdminResetHour))
     end
 
@@ -1291,23 +1305,23 @@ local function triggerCataclysmWeather(player)
     -- Uses admin climate floats because modded/override floats can be ignored by normal weather updates.
     applyCataclysmFogWindOverrides(player, cm, duration)
 
-    -- Extra fallback layering. These are intentionally pcall-safe because B42 weather access
-    -- can vary by SP/MP context and minor version. They should not break the event.
-    if cm and cm.transmitServerStartRain then
-        tryWeather("transmitServerStartRain(1.0)", function()
-            cm:transmitServerStartRain(1.0)
+    -- Only use custom-weather APIs when the preferred tropical/storm trigger failed.
+    -- Stacking them on a successful weather period can replace the requested duration.
+    if not usedPrimaryWeather and cm and cm.triggerCustomWeatherStage then
+        usedPrimaryWeather = tryWeather("triggerCustomWeatherStage(3, " .. tostring(duration) .. ")", function()
+            cm:triggerCustomWeatherStage(3, duration)
         end)
     end
 
-    if cm and cm.triggerCustomWeather then
-        tryWeather("triggerCustomWeather(1.0, true)", function()
+    if not usedPrimaryWeather and cm and cm.triggerCustomWeather then
+        usedPrimaryWeather = tryWeather("triggerCustomWeather(1.0, true)", function()
             cm:triggerCustomWeather(1.0, true)
         end)
     end
 
-    if cm and cm.triggerCustomWeatherStage then
-        tryWeather("triggerCustomWeatherStage(3, " .. tostring(duration) .. ")", function()
-            cm:triggerCustomWeatherStage(3, duration)
+    if not usedPrimaryWeather and cm and cm.transmitServerStartRain then
+        usedPrimaryWeather = tryWeather("transmitServerStartRain(1.0)", function()
+            cm:transmitServerStartRain(1.0)
         end)
     end
 
@@ -1327,35 +1341,39 @@ local function triggerCataclysmWeather(player)
 end
 
 
+local function isInstanceOf(value, className)
+    if value == nil or type(instanceof) ~= "function" then return false end
+    local ok, matches = pcall(function()
+        return instanceof(value, className)
+    end)
+    return ok and matches == true
+end
+
+local function isIsoZombieObject(value)
+    return isInstanceOf(value, "IsoZombie")
+end
+
 local function collectSpawnedZombies(result)
     local zombies = {}
     if result == nil then return zombies end
 
-    local okZombie, isZombie = pcall(function()
-        return result:isZombie()
-    end)
-    if okZombie and isZombie then
+    if isIsoZombieObject(result) then
         table.insert(zombies, result)
         return zombies
     end
 
-    local okSize, size = pcall(function()
-        return result:size()
-    end)
-    size = tonumber(size) or 0
-    if okSize and size > 0 then
+    if isInstanceOf(result, "ArrayList") then
+        local size = tonumber(result:size()) or 0
         for i = 0, size - 1 do
-            local okItem, item = pcall(function()
-                return result:get(i)
-            end)
-            if okItem and item then
-                local okItemZombie, itemIsZombie = pcall(function()
-                    return item:isZombie()
-                end)
-                if okItemZombie and itemIsZombie then
-                    table.insert(zombies, item)
-                end
-            end
+            local item = result:get(i)
+            if isIsoZombieObject(item) then table.insert(zombies, item) end
+        end
+        return zombies
+    end
+
+    if type(result) == "table" then
+        for _, item in pairs(result) do
+            if isIsoZombieObject(item) then table.insert(zombies, item) end
         end
     end
 
@@ -1384,9 +1402,7 @@ local function buildObjectSet(objects)
 end
 
 local function objectIsZombie(object)
-    if not object then return false end
-    local ok, isZombie = pcall(function() return object:isZombie() end)
-    return ok and isZombie == true
+    return isIsoZombieObject(object)
 end
 
 local function collectNearbyZombies(x, y, z, radius, maxCount, exclude)
@@ -1709,8 +1725,9 @@ spawnCataclysmCatchup = function(sync)
 
     local dirX = moveX / moveLen
     local dirY = moveY / moveLen
-    local baseX = math.floor(px - (dirX * CATACLYSM_CATCHUP_SPAWN_RADIUS))
-    local baseY = math.floor(py - (dirY * CATACLYSM_CATCHUP_SPAWN_RADIUS))
+    local spawnRadius = getCataclysmCatchupSpawnRadius()
+    local baseX = math.floor(px - (dirX * spawnRadius))
+    local baseY = math.floor(py - (dirY * spawnRadius))
     local baseZ = serverRuntimeActive() and 0 or math.floor(tonumber(pz) or tonumber(sync.z) or 0)
     local baseSquare = findUsableSquareNearPoint(baseX, baseY, baseZ, 18, true)
     if not baseSquare then
@@ -1725,7 +1742,7 @@ spawnCataclysmCatchup = function(sync)
     local sx = baseSquare:getX()
     local sy = baseSquare:getY()
     local sz = getSquareZ(baseSquare, baseZ)
-    local spawned, err, mode = spawnZombieCluster(
+    local spawned, err, mode, spawnedZombies = spawnZombieCluster(
         sync.player,
         sx,
         sy,
@@ -1743,6 +1760,11 @@ spawnCataclysmCatchup = function(sync)
         return 0
     end
 
+    local pursued = 0
+    if spawnedZombies and #spawnedZombies > 0 then
+        pursued = select(1, startCataclysmPursuit(sync.player, spawnedZombies, 0))
+    end
+
     sync.spawnX = sx
     sync.spawnY = sy
     sync.z = sz
@@ -1753,11 +1775,16 @@ spawnCataclysmCatchup = function(sync)
     sync.catchupSpawned = (tonumber(sync.catchupSpawned) or 0) + spawned
     sync.nextCatchupAtMs = ms + CATACLYSM_CATCHUP_MIN_MS
 
-    sendDebug(sync.player, "DHE: CATACLYSM catch-up spawned=" .. tostring(spawned) .. "/" .. tostring(batch) .. " via=" .. tostring(mode) .. " near " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. " dist=" .. tostring(math.floor(distance)) .. " extra=" .. tostring(sync.catchupSpawned) .. "/" .. tostring(sync.catchupMax))
+    sendDebug(sync.player, "DHE: CATACLYSM catch-up spawned=" .. tostring(spawned) .. "/" .. tostring(batch) .. " via=" .. tostring(mode) .. " near " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz) .. " dist=" .. tostring(math.floor(distance)) .. " radius=" .. tostring(spawnRadius) .. " pursuit=" .. tostring(pursued) .. " extra=" .. tostring(sync.catchupSpawned) .. "/" .. tostring(sync.catchupMax))
     return spawned
 end
 
 local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSeconds, screenEffectSeconds)
+    if not DynamicHordeEvents.GetBool("EnableEventNotifications") then
+        sendDebug(player, "DHE: " .. tostring(eventType or "normal") .. " player notification suppressed by sandbox")
+        return false
+    end
+
     local payload = {
         x = sx,
         y = sy,
@@ -1813,6 +1840,7 @@ local function notifyPlayer(player, sx, sy, sz, count, eventType, indicatorSecon
     else
         sendDebug(player, "DHE: incoming notification failed: targeted=" .. tostring(errTargeted) .. ", broadcast=" .. tostring(errBroadcast) .. ", pending=" .. tostring(errPending))
     end
+    return delivered
 end
 
 local function spawnHorde(player, forceNear, forceCount)
@@ -1867,11 +1895,10 @@ local function spawnHorde(player, forceNear, forceCount)
         clientPursuitSyncQueued = startNormalHordePursuitSync(player, sx, sy, sz, spawned)
         delayedTargetQueued = queueNormalHordePursuitAcquisition(player, sx, sy, sz, spawned, normalPursuitBeforeZombies, spawnedZombies)
     end
-    attractHordeToPlayer(player)
-    notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
-
-    lastSpawnHour = getGameTime():getWorldAgeHours()
-    scheduleNextSpawn(player)
+    if spawned > 0 then
+        attractHordeToPlayer(player)
+        notifyPlayer(player, sx, sy, sz, spawned, "normal", DynamicHordeEvents.GetNumber("IndicatorSeconds"), 0)
+    end
 
     local scalingText = ""
     if not forceNear and not forceCount and scalingMultiplier and scalingMultiplier > 1.0 then
@@ -2013,9 +2040,6 @@ local function spawnWanderingHorde(player, forceCount)
         0
     )
 
-    lastWanderingHour = getGameTime():getWorldAgeHours()
-    scheduleNextWandering(player)
-
     sendDebug(player, "DHE: WANDERING spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(routeZ) .. " exit=" .. tostring(tx) .. "," .. tostring(ty) .. " playerZ=" .. tostring(playerZ) .. " configuredSpread=" .. tostring(spread))
     return spawned > 0
 end
@@ -2118,9 +2142,6 @@ local function spawnCataclysmHorde(player)
         DynamicHordeEvents.GetNumber("CataclysmScreenEffectSeconds")
     )
 
-    lastCataclysmDay = getWorldDaysSurvived()
-    scheduleNextCataclysm(player)
-
     sendDebug(player, "DHE: CATACLYSM spawned=" .. tostring(spawned) .. "/" .. tostring(count) .. " at " .. tostring(sx) .. "," .. tostring(sy) .. "," .. tostring(sz))
     if spawned == 0 and lastErr then
         sendDebug(player, "DHE: cataclysm spawn API failed: " .. tostring(lastErr))
@@ -2129,64 +2150,95 @@ local function spawnCataclysmHorde(player)
     return spawned > 0
 end
 
-function DynamicHordeEvents.Server.Update()
-    if not serverLogicAllowed() then return end
-    if not DynamicHordeEvents.GetBool("Enabled") then return end
+local SCHEDULED_SPAWN_RETRY_HOURS = 1
 
-    if cataclysmWeatherAdminResetHour ~= nil and getGameTime and getGameTime():getWorldAgeHours() >= cataclysmWeatherAdminResetHour then
-        resetCataclysmWeatherOverrides(nil)
+local function finishScheduledAttempt(eventType, player, success, currentHour)
+    if success then
+        local nextHour = Scheduler.MarkSuccess(eventType, currentHour)
+        sendDebug(player, "DHE scheduler: " .. tostring(eventType) .. " completed; nextWorldHour=" .. tostring(nextHour))
+        return
     end
 
-    local normalHordeEnabled = DynamicHordeEvents.GetBool("EnableNormalHorde")
-    if normalHordeEnabled and nextSpawnHour == nil then
-        scheduleNextSpawn(nil)
-    end
-    if nextCataclysmDay == nil and DynamicHordeEvents.GetBool("EnableCataclysmHorde") then
-        scheduleNextCataclysm(nil)
-    end
-    if nextWanderingHour == nil and DynamicHordeEvents.GetBool("EnableWanderingHorde") then
-        scheduleNextWandering(nil)
-    end
+    local retryHour = Scheduler.DeferFailure(eventType, currentHour, SCHEDULED_SPAWN_RETRY_HOURS, "spawn-failed")
+    sendDebug(player, "DHE scheduler: " .. tostring(eventType) .. " spawn failed; retryWorldHour=" .. tostring(retryHour))
+end
 
-    local currentHour = getGameTime():getWorldAgeHours()
-    local currentDay = getWorldDaysSurvived()
-
-    if DynamicHordeEvents.GetBool("EnableCataclysmHorde") and nextCataclysmDay ~= nil and currentDay >= nextCataclysmDay then
-        local cPlayer = pickTargetPlayer()
-        if cPlayer then
-            spawnCataclysmHorde(cPlayer)
-        end
-    end
-
-    if DynamicHordeEvents.GetBool("EnableWanderingHorde") and nextWanderingHour ~= nil and currentHour >= nextWanderingHour then
-        local wPlayer = pickTargetPlayer()
-        if wPlayer then
-            spawnWanderingHorde(wPlayer, nil)
-        end
-    end
-
-    if not normalHordeEnabled or nextSpawnHour == nil then return end
-
-    if currentHour < nextSpawnHour then return end
-
-    local cooldown = DynamicHordeEvents.GetNumber("CooldownHours")
-    if currentHour - lastSpawnHour < cooldown then return end
+local function updateScheduledEvent(eventType, currentHour, spawnFunction)
+    if not Scheduler.IsDue(eventType, currentHour) then return end
 
     local player = pickTargetPlayer()
     if not player then return end
 
-    if DynamicHordeEvents.GetBool("DisableAtNight") and isNightTime() then
-        sendDebug(player, "DHE: random horde skipped because night spawning is disabled.")
-        scheduleNextSpawn(player)
+    if eventType == "normal" and DynamicHordeEvents.GetBool("DisableAtNight") and isNightTime() then
+        local nextHour = Scheduler.MarkSkipped(eventType, currentHour, "night-disabled")
+        sendDebug(player, "DHE: normal horde skipped because night spawning is disabled; nextWorldHour=" .. tostring(nextHour))
         return
     end
 
-    spawnHorde(player, false, nil)
+    finishScheduledAttempt(eventType, player, spawnFunction(player), currentHour)
+end
+
+function DynamicHordeEvents.Server.Update()
+    if not serverLogicAllowed() then return end
+
+    local currentHour = getGameTime():getWorldAgeHours()
+    Scheduler.Initialize(currentHour)
+
+    if cataclysmWeatherAdminResetHour == nil then
+        cataclysmWeatherAdminResetHour = tonumber(Scheduler.GetMeta("cataclysmWeatherAdminResetHour"))
+    end
+    if cataclysmWeatherAdminResetHour ~= nil and currentHour >= cataclysmWeatherAdminResetHour then
+        resetCataclysmWeatherOverrides(nil)
+    end
+
+    if not DynamicHordeEvents.GetBool("Enabled") then return end
+
+    updateScheduledEvent("cataclysm", currentHour, spawnCataclysmHorde)
+    updateScheduledEvent("wandering", currentHour, function(player)
+        return spawnWanderingHorde(player, nil)
+    end)
+    updateScheduledEvent("normal", currentHour, function(player)
+        return spawnHorde(player, false, nil)
+    end)
+end
+
+local function playerCanUseDebugCommands(player)
+    if not player then return false end
+    if not serverRuntimeActive() then return true end
+
+    local controlsEnabled =
+        DynamicHordeEvents.GetBool("Debug")
+        or DynamicHordeEvents.GetBool("EnableDebugContextMenu")
+        or DynamicHordeEvents.GetBool("EnableDebugHotkey")
+    if not controlsEnabled then return false end
+
+    local allowed = false
+    pcall(function()
+        local role = player:getRole()
+        if role and Capability and Capability.UseDebugContextMenu and role:hasCapability(Capability.UseDebugContextMenu) then
+            allowed = true
+        elseif role and role.hasAdminPower and role:hasAdminPower() then
+            allowed = true
+        end
+    end)
+
+    if not allowed then
+        pcall(function()
+            local accessLevel = tostring(player:getAccessLevel() or "")
+            allowed = accessLevel ~= "" and accessLevel ~= "None" and accessLevel ~= "none"
+        end)
+    end
+
+    return allowed
 end
 
 function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args)
     if not serverLogicAllowed() then return end
     if module ~= DynamicHordeEvents.CommandModule then return end
+    if not playerCanUseDebugCommands(player) then
+        sendDebug(player, "DHE: denied debug command " .. tostring(command))
+        return
+    end
 
     if command == "TestSpawnNear" then
         sendDebug(player, "DHE: forced TEST spawn near player requested.")
@@ -2203,7 +2255,28 @@ function DynamicHordeEvents.Server.OnClientCommand(module, command, player, args
     elseif command == "Status" then
         local currentHour = getGameTime():getWorldAgeHours()
         local multiplier, steps, daysSurvived = getHordeScalingMultiplier()
-        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version) .. ", currentHour=" .. tostring(currentHour) .. ", nextSpawnHour=" .. tostring(nextSpawnHour) .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled")) .. ", normalEnabled=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHorde")) .. ", normalTargeting=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePursuit")) .. ", normalPathAssist=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePathAssist")) .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode")) .. ", scalingMultiplier=" .. string.format("%.2f", multiplier) .. ", scalingSteps=" .. tostring(steps) .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0) .. ", nextCataclysmDay=" .. tostring(nextCataclysmDay) .. ", nextWanderingHour=" .. tostring(nextWanderingHour))
+        local normalSchedule = Scheduler.GetSnapshot("normal", currentHour) or {}
+        local wanderingSchedule = Scheduler.GetSnapshot("wandering", currentHour) or {}
+        local cataclysmSchedule = Scheduler.GetSnapshot("cataclysm", currentHour) or {}
+        sendDebug(player, "DHE status: version=" .. tostring(DynamicHordeEvents.Version)
+            .. ", currentHour=" .. tostring(currentHour)
+            .. ", enabled=" .. tostring(DynamicHordeEvents.GetBool("Enabled"))
+            .. ", normalNextHour=" .. tostring(normalSchedule.nextHour)
+            .. ", normalAttemptHour=" .. tostring(normalSchedule.nextAttemptHour)
+            .. ", normalMode=" .. tostring(normalSchedule.mode)
+            .. ", wanderingNextHour=" .. tostring(wanderingSchedule.nextHour)
+            .. ", wanderingAttemptHour=" .. tostring(wanderingSchedule.nextAttemptHour)
+            .. ", wanderingMode=" .. tostring(wanderingSchedule.mode)
+            .. ", cataclysmNextHour=" .. tostring(cataclysmSchedule.nextHour)
+            .. ", cataclysmNextDay=" .. tostring(cataclysmSchedule.nextHour and (cataclysmSchedule.nextHour / 24) or nil)
+            .. ", cataclysmAttemptHour=" .. tostring(cataclysmSchedule.nextAttemptHour)
+            .. ", cataclysmMode=" .. tostring(cataclysmSchedule.mode)
+            .. ", normalTargeting=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePursuit"))
+            .. ", normalPathAssist=" .. tostring(DynamicHordeEvents.GetBool("EnableNormalHordePathAssist"))
+            .. ", scalingMode=" .. tostring(DynamicHordeEvents.GetNumber("ScalingMode"))
+            .. ", scalingMultiplier=" .. string.format("%.2f", multiplier)
+            .. ", scalingSteps=" .. tostring(steps)
+            .. ", daysSurvived=" .. string.format("%.1f", daysSurvived or 0))
     end
 end
 
@@ -2215,9 +2288,16 @@ Events.OnTick.Add(updateNormalHordePursuitSyncs)
 Events.OnTick.Add(updateCataclysmPursuit)
 Events.OnTick.Add(updateCataclysmPursuitSyncs)
 Events.OnGameStart.Add(function()
-    if DynamicHordeEvents.GetBool("EnableNormalHorde") then scheduleNextSpawn(nil) end
-    if DynamicHordeEvents.GetBool("EnableCataclysmHorde") then scheduleNextCataclysm(nil) end
-    if DynamicHordeEvents.GetBool("EnableWanderingHorde") then scheduleNextWandering(nil) end
+    local currentHour = Scheduler.GetWorldHour()
+    Scheduler.Initialize(currentHour)
+    cataclysmWeatherAdminResetHour = tonumber(Scheduler.GetMeta("cataclysmWeatherAdminResetHour"))
+
+    local normalSchedule = Scheduler.GetSnapshot("normal", currentHour) or {}
+    local wanderingSchedule = Scheduler.GetSnapshot("wandering", currentHour) or {}
+    local cataclysmSchedule = Scheduler.GetSnapshot("cataclysm", currentHour) or {}
+    DynamicHordeEvents.DebugPrint("DHE scheduler loaded: normal=" .. tostring(normalSchedule.nextHour)
+        .. ", wandering=" .. tostring(wanderingSchedule.nextHour)
+        .. ", cataclysm=" .. tostring(cataclysmSchedule.nextHour))
 end)
 Events.EveryTenMinutes.Add(DynamicHordeEvents.Server.Update)
 Events.EveryHours.Add(DynamicHordeEvents.Server.Update)

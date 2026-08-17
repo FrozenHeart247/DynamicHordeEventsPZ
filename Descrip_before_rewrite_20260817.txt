@@ -1,0 +1,140 @@
+[h1]Dynamic Horde Events [/h1]
+Tired of sitting safely inside your base while absolutely nothing happens?
+
+Cleared the neighborhood, boarded the windows, stacked food for three months, and now the apocalypse feels more like a sad farming simulator?
+
+Dynamic Horde Events adds highly configurable incoming zombie horde events to Project Zomboid.
+Sometimes the dead will find you. Sometimes you will hear them before you see them. And sometimes the sky itself will tell you that staying home was a terrible idea.
+
+This mod is designed to bring back pressure, danger, and unpredictability without turning every day into a constant zombie flood.
+
+[h1]🎲Core Features[/h1]
+[h3]Random Horde Events[/h3]
+
+At configurable time intervals, a horde can spawn at a distance from the player and begin moving toward them.
+
+You can configure:
+[list]
+[*]Direct player target
+[*] minimum and maximum time between horde events
+[*]  horde size
+[*] spawn radius
+[*]  cooldown between events
+[*] night-time spawning rules
+[*] attraction radius and volume
+[/list]
+
+The goal is simple: make the world feel dangerous again, even after you cleared your local area. Now you almost have to barricade windows and doors since they can come even at your night sleep
+
+[h1]🚶‍♂️🚶🚶‍♀️Wandering Horde Events[/h1]
+Wandering Hordes are different from normal horde attacks.
+
+Instead of being attracted directly toward the player’s position, a Wandering Horde is spawned on one side of the player and guided toward a point beyond the player’s area.
+
+In simple terms:
+
+Spawn Side  --->  Player Area  --->  Exit Direction
+
+This means the horde can pass through or near your location instead of directly hunting you.
+
+If you stay quiet, hide, and avoid making noise, the horde may pass by.
+
+If you shoot, drive, trigger an alarm, use loud tools, or make too much noise, the situation can quickly become your problem.
+
+Wandering Hordes are meant to create tense “hold your breath and don’t move” moments.
+
+[h1] 🔊Survivor Voice Lines [/h1]
+Your character can react when a horde is coming. Lines are short, random, and can be disabled through sandbox options.
+
+[h1]🎯Direction Indicator[/h1]
+When a horde event starts, the player gets a visual warning showing where the threat is coming from.
+
+The indicator shows:
+[list]
+[*]horde direction
+[*]distance
+[*]zombie count
+[*]event type
+[/list]
+
+[h1]🔈Warning Sound[/h1]
+A warning sound plays when a horde is incoming.
+This gives you a short moment to react:
+[list]
+[*]prepare defenses
+[*]grab weapons
+[*]run
+[*]panic professionally
+[/list]
+
+[h1]💀Horde Size Scaling[/h1]
+Hordes can scale over time based on survived days or survived months.
+
+You can configure:
+[list]
+[*]scaling mode: Off / Days / Months
+[*]scaling interval
+[*]multiplier per interval
+[*]maximum multiplier cap
+[/list]
+Example: Every 7 days, horde size increases by 10%, up to 150%.
+
+This keeps the pressure alive without instantly throwing an entire city at you
+
+[h1]☠️Cataclysm Horde Event[/h1]
+A rare ultra-hardcore horde event can happen after a long survival period.
+
+This is not a normal horde. They know where you are. You cannot escape (actually you can)
+
+This is the kind of event where your character hears the sound and immediately starts questioning every life choice that led to this moment.
+
+Cataclysm hordes have separate settings:
+[list]
+[*]enable / disable Cataclysm Horde
+[*]minimum and maximum days before event
+[*]zombie count
+[*]spawn radius
+[*]warning duration
+[*] attraction radius and volume
+[/list]
+
+Every 90–120 days, a massive horde can arrive. They will follow you whatever you go. Staying quiet is not an option here.. Take your best weapon and defend yourself. Or... Try to escape. But they will be there when you decide to return
+
+This is meant for long-term saves where the map starts feeling too safe after you clear nearby locations.
+
+[h1]🌧️Cataclysm Weather[/h1]
+When a Cataclysm Horde begins, the weather can change dramatically letting you know that this time it's serious.
+
+The mod triggers:
+
+[list]
+[*]tropical storm
+[*]heavy rain
+[*]stronger wind
+[*]fog
+[*]darker atmosphere
+[*]desaturated screen feel
+[/list]
+
+[h1]Notes[/h1]
+Large hordes (specially cataclysm ones) can affect performance depending on your system, zombie settings, map location, and other mods.
+
+If you want a smoother experience, reduce:
+
+- maximum horde size
+- Cataclysm maximum zombies
+- attraction radius
+- spawn frequency
+
+[h1]What build? Does it work in MP?[/h1]
+✅42.20
+Tested on B42.17
+B42.18 Seems working fine in Singleplayer (not tested in multiplayer)
+Yes. It does. But I didn't test it well enough so there might be issues
+
+[h1]Compatibility[/h1]
+Should be compatible with everything
+
+[h1]Also I recommend playing with [url=https://steamcommunity.com/sharedfiles/filedetails/?id=2749928925&searchtext=cdda]CCDA zombies[/url] and [url=https://steamcommunity.com/sharedfiles/filedetails/?id=3698715963&searchtext=cheval]Cheval de Frise[/url] [/h1]
+Adds more variety to the hordes and options to defend your base
+

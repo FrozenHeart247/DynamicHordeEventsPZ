@@ -4,5 +4,5 @@ author=FrozenHeart
 poster=poster.png
 icon=poster.png
 versionMin=42.17
-modversion=1.0
-description=Configurable horde events for Project Zomboid B42.17.
+modversion=0.10.1
+description=Configurable horde events for Project Zomboid Build 42, tested on 42.20 stable.

@@ -8,12 +8,50 @@ option DynamicHordeEvents.Enabled
     translation = DynamicHordeEvents_Enabled,
 }
 
+option DynamicHordeEvents.EnableEventNotifications
+{
+    type = boolean,
+    default = true,
+    page = DynamicHordeEvents_General,
+    translation = DynamicHordeEvents_EnableEventNotifications,
+}
+
 option DynamicHordeEvents.EnableNormalHorde
 {
     type = boolean,
     default = true,
     page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_EnableNormalHorde,
+}
+
+option DynamicHordeEvents.NormalScheduleMode
+{
+    type = enum,
+    numValues = 2,
+    default = 1,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_NormalScheduleMode,
+    valueTranslation = DynamicHordeEvents_ScheduleMode,
+}
+
+option DynamicHordeEvents.NormalFixedIntervalDays
+{
+    type = integer,
+    min = 1,
+    max = 3650,
+    default = 7,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_NormalFixedIntervalDays,
+}
+
+option DynamicHordeEvents.NormalFixedHour
+{
+    type = integer,
+    min = 0,
+    max = 23,
+    default = 22,
+    page = DynamicHordeEvents_Normal,
+    translation = DynamicHordeEvents_NormalFixedHour,
 }
 
 option DynamicHordeEvents.MinSpawnHours
@@ -68,12 +106,12 @@ option DynamicHordeEvents.MaxZombies
 
 option DynamicHordeEvents.ScalingMode
 {
-    type = integer,
-    min = 1,
-    max = 3,
+    type = enum,
+    numValues = 3,
     default = 2,
     page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_ScalingMode,
+    valueTranslation = DynamicHordeEvents_ScalingModeValue,
 }
 
 option DynamicHordeEvents.ScalingInterval
@@ -130,7 +168,7 @@ option DynamicHordeEvents.DisableAtNight
 {
     type = boolean,
     default = false,
-    page = DynamicHordeEvents_General,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_DisableAtNight,
 }
 
@@ -140,7 +178,7 @@ option DynamicHordeEvents.NightStartHour
     min = 0,
     max = 23,
     default = 22,
-    page = DynamicHordeEvents_General,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_NightStartHour,
 }
 
@@ -150,7 +188,7 @@ option DynamicHordeEvents.NightEndHour
     min = 0,
     max = 23,
     default = 5,
-    page = DynamicHordeEvents_General,
+    page = DynamicHordeEvents_Normal,
     translation = DynamicHordeEvents_NightEndHour,
 }
 
@@ -158,7 +196,7 @@ option DynamicHordeEvents.EnableDirectionIndicator
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents_Normal,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_EnableDirectionIndicator,
 }
 
@@ -176,7 +214,7 @@ option DynamicHordeEvents.EnableWarningSound
 {
     type = boolean,
     default = true,
-    page = DynamicHordeEvents_Normal,
+    page = DynamicHordeEvents_General,
     translation = DynamicHordeEvents_EnableWarningSound,
 }
 
@@ -268,6 +306,36 @@ option DynamicHordeEvents.EnableCataclysmHorde
     default = true,
     page = DynamicHordeEvents_Cataclysm,
     translation = DynamicHordeEvents_EnableCataclysmHorde,
+}
+
+option DynamicHordeEvents.CataclysmScheduleMode
+{
+    type = enum,
+    numValues = 2,
+    default = 1,
+    page = DynamicHordeEvents_Cataclysm,
+    translation = DynamicHordeEvents_CataclysmScheduleMode,
+    valueTranslation = DynamicHordeEvents_ScheduleMode,
+}
+
+option DynamicHordeEvents.CataclysmFixedIntervalDays
+{
+    type = integer,
+    min = 1,
+    max = 3650,
+    default = 90,
+    page = DynamicHordeEvents_Cataclysm,
+    translation = DynamicHordeEvents_CataclysmFixedIntervalDays,
+}
+
+option DynamicHordeEvents.CataclysmFixedHour
+{
+    type = integer,
+    min = 0,
+    max = 23,
+    default = 22,
+    page = DynamicHordeEvents_Cataclysm,
+    translation = DynamicHordeEvents_CataclysmFixedHour,
 }
 
 option DynamicHordeEvents.CataclysmMinDays
@@ -486,6 +554,36 @@ option DynamicHordeEvents.EnableWanderingHorde
     default = true,
     page = DynamicHordeEvents_Wandering,
     translation = DynamicHordeEvents_EnableWanderingHorde,
+}
+
+option DynamicHordeEvents.WanderingScheduleMode
+{
+    type = enum,
+    numValues = 2,
+    default = 1,
+    page = DynamicHordeEvents_Wandering,
+    translation = DynamicHordeEvents_WanderingScheduleMode,
+    valueTranslation = DynamicHordeEvents_ScheduleMode,
+}
+
+option DynamicHordeEvents.WanderingFixedIntervalDays
+{
+    type = integer,
+    min = 1,
+    max = 3650,
+    default = 1,
+    page = DynamicHordeEvents_Wandering,
+    translation = DynamicHordeEvents_WanderingFixedIntervalDays,
+}
+
+option DynamicHordeEvents.WanderingFixedHour
+{
+    type = integer,
+    min = 0,
+    max = 23,
+    default = 22,
+    page = DynamicHordeEvents_Wandering,
+    translation = DynamicHordeEvents_WanderingFixedHour,
 }
 
 option DynamicHordeEvents.WanderingMinHours

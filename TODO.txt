@@ -1,0 +1,24 @@
+	
+	1. Hello, I could never get the horde to spawn in MP (dedicated server). Debug works fine, debug counts as a force spawn. We waited for the automated one to go in but nothing's happening for both Normal and Wandering. We tweaked the hours to spawn to around 4-6 ingame days and it's already day 10 and nothing's happening. Not sure how to send error logs, it's not throwing anything on the server logs, nor any error popups are happening.
+	I got it to work changing the minimum game hours for horde spawn.. i think its glitched and it counts minimum hours for horde spawn RESTARTING on every game session, that's why some people never get to see it. If you set it for 5 days ur gonna have to have a game session that last for at least 7,5 hours IRL (5 days in game) without interruption which of course not many ppl do. Try setting the minimum for 1 hour (in game time for minimum) and u can see that they spawn. I think its glitched or maybe its not and the creator may have to do some clarification on that. What's interesting is that the increments for intervals seem to work just fine, based on the days survived for the character though. The total zombie count at the moment of the horde spawn takes it under consideration.
+	
+	Yeah I set it to a low timer spawn and it works perfectly. We just need a multiplayer patch/fix on making the timers persistent everytime the server reboots
+	Yeah well i think its nice, you have some control on per session horde spawning idk. You can play a lil bit with the config. Leave 1 hour minimum and the bigger the Max number, the less of a chance a horde has for spawning. I think 720 hs or so is the max number, obviously no one will play 30 days straight on the same session bc well its like playing for about 48 hs irl back to back lmao, but if you set it that way, you can have some unpredictability simply bc the chance of horde spawning at the beginning of your session would be mathematically way lower than if you set it to max.. say... 5 days in game.. HOPE ive helped a bit! cheerss
+	
+	
+	2. For some reason no hordes spawn. I always get messages that hordes spawn in x direction x tiles away but when I go there, no horde can be found. Im playing on the chesttown map and added this mod midsave but besides that nothing else is different (didnt change any sandbox settings)
+	
+	
+	3. Every time I reload my single-player save, all horde timers reroll a new random value, including regular hordes and cataclysm horde. I can never reach my set cataclysm day window because the timer resets randomly on every load. Is there any fix for this issue?
+	
+	4. No events happening in MP 42.20 dedicated server
+	
+	5. The character dialogue is hardcoded in the mod. I'm trying to make it work without having to modify the mod's code, but could you take a look at making the dialogues load the files from the "Translate" folder? Thanks!
+	
+	6. How do I turn off sound and warnings for all horde events? The options only have it available for like 2 of them
+	
+	7. I have alarms set to false is sandboxvars but when a horde spawns it still issues alerts. I find the alerts to be immersion breaking
+	
+	8. added it to an existing mp game-- cant see it in the options menu of the server; Cant configure it in the mods;
+	
+10. Would be nice to add not random spawn ours but precise specific time. Like 7 days to die mode
